@@ -9,11 +9,19 @@ import { getAccount } from "@/lib/crm/accounts";
 import { listContactsForAccount } from "@/lib/crm/contacts";
 import { listOpportunitiesForAccount } from "@/lib/crm/opportunities";
 import { listActivitiesForAccount } from "@/lib/crm/activities";
+import {
+  listDocumentsForAccount,
+  listActiveTemplates,
+  isDriveConnected,
+} from "@/lib/crm/documents";
 import { ContactList } from "@/components/crm/contact-list";
 import { OpportunityList } from "@/components/crm/opportunity-list";
 import { ActivityTimeline } from "@/components/crm/activity-timeline";
 import { NoteComposer } from "@/components/crm/note-composer";
 import { TaskComposer } from "@/components/crm/task-composer";
+import { DocumentList } from "@/components/crm/document-list";
+import { DriveAttachButton } from "@/components/crm/drive-attach-button";
+import { GenerateContractDialog } from "@/components/crm/generate-contract-dialog";
 import { requireUser } from "@/lib/auth/session";
 
 export default async function AccountDetailPage(props: {
@@ -24,11 +32,15 @@ export default async function AccountDetailPage(props: {
   const account = await getAccount(id);
   if (!account) notFound();
 
-  const [contacts, opportunities, activities] = await Promise.all([
-    listContactsForAccount(id),
-    listOpportunitiesForAccount(id),
-    listActivitiesForAccount(id, 50),
-  ]);
+  const [contacts, opportunities, activities, documents, templates, driveConnected] =
+    await Promise.all([
+      listContactsForAccount(id),
+      listOpportunitiesForAccount(id),
+      listActivitiesForAccount(id, 50),
+      listDocumentsForAccount(id),
+      listActiveTemplates(),
+      isDriveConnected(user.id),
+    ]);
 
   return (
     <div className="px-6 py-5">
@@ -74,7 +86,7 @@ export default async function AccountDetailPage(props: {
         </CardContent>
       </Card>
 
-      {/* Panels 2-4: Activity / Contacts / Opportunities */}
+      {/* Panels 2+: Activity / Contacts / Opportunities / Documents */}
       <Tabs defaultValue="activity">
         <TabsList>
           <TabsTrigger value="activity">
@@ -93,6 +105,12 @@ export default async function AccountDetailPage(props: {
             Opportunities{" "}
             <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
               {opportunities.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="documents">
+            Documents{" "}
+            <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
+              {documents.length}
             </Badge>
           </TabsTrigger>
         </TabsList>
@@ -114,6 +132,29 @@ export default async function AccountDetailPage(props: {
 
         <TabsContent value="opportunities" className="mt-3">
           <OpportunityList accountId={account.id} opportunities={opportunities} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-3 space-y-3">
+          <div className="flex justify-end gap-2">
+            <GenerateContractDialog accountId={account.id} templates={templates} />
+            <DriveAttachButton
+              accountId={account.id}
+              driveConnected={driveConnected}
+            />
+          </div>
+          <DocumentList
+            accountId={account.id}
+            documents={documents}
+            emptyAction={
+              !driveConnected ? (
+                <span>
+                  Connect Google Drive first (use the button above).
+                </span>
+              ) : (
+                <span>Attach an existing Drive file or generate from a template.</span>
+              )
+            }
+          />
         </TabsContent>
       </Tabs>
     </div>

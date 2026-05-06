@@ -15,17 +15,35 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { Building2, KanbanSquare, Settings, GraduationCap, Inbox } from "lucide-react";
+import {
+  Building2,
+  KanbanSquare,
+  Settings,
+  GraduationCap,
+  Inbox,
+  Plug,
+  FileCode,
+  Package,
+  BarChart3,
+} from "lucide-react";
 import type { User } from "@/lib/db/schema";
 
 const NAV = [
   { href: "/accounts", label: "Accounts", icon: Building2 },
   { href: "/opportunities", label: "Opportunities", icon: KanbanSquare },
+  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+] as const;
+
+const PERSONAL_NAV = [
+  { href: "/settings/integrations", label: "Integrations", icon: Plug },
 ] as const;
 
 const ADMIN_NAV = [
   { href: "/settings/pipelines", label: "Pipelines", icon: KanbanSquare },
-  { href: "/settings/users", label: "Users & Roles", icon: Settings },
+  { href: "/settings/catalog", label: "Catalog", icon: Package },
+  { href: "/settings/templates", label: "Contract templates", icon: FileCode },
+  { href: "/settings/users", label: "Users & roles", icon: Settings },
+  { href: "/settings/audit", label: "Audit log", icon: Settings },
 ] as const;
 
 export function AppSidebar({ role }: { role: User["role"] }) {
@@ -74,6 +92,24 @@ export function AppSidebar({ role }: { role: User["role"] }) {
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Personal</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {PERSONAL_NAV.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton asChild isActive={isActive(item.href)} tooltip={item.label}>
+                    <Link href={item.href}>
+                      <item.icon className="size-4" />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
