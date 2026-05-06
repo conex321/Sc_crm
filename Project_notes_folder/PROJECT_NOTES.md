@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-05-06
 **Last agent:** Claude
-**Session summary:** Brainstorm session for in-house CRM design. Twelve architectural decisions captured. Spec written + tightened with four implementation constraints (D-013 through D-016). Phase 1 execution started — scaffolding next.
+**Session summary:** Brainstorm + spec + Phase 1 step 1 complete. Project scaffolded (Next.js 16 + Tailwind v4 + Supabase + Drizzle); first commit `a47f81a`. Build green. Ready for step 2 (Supabase schema + migrations).
 **Notes mode:** single-file
 
 ---
@@ -136,11 +136,23 @@ The persistent-notes system (this folder + the `update-project-notes` skill) is 
 - Project notes folder created at `e:\Claude\SchoolConex\SchoolConex_CRM\Project_notes_folder` (single-file mode)
 - `update-project-notes` skill installed in `.claude/skills/` and `.codex/skills/`
 
+### Session 2026-05-06 — Spec tightening + Phase 1 step 1 (Claude)
+- Spec tightened with D-013 (Phase 1 lock-in), D-014 (nullable `account_id` + Unmatched inbox), D-015 (standardized audit columns), D-016 (sidebar-first compact UI direction)
+- Project scaffolded: git init (main), package.json, tsconfig, next.config.ts, postcss.config.mjs, app/{layout.tsx,page.tsx,globals.css}, lib/utils.ts, eslint flat config, prettier, components.json (shadcn), .env.example, README.md
+- Folder shape created with `.gitkeep` markers per spec
+- Dependencies installed; Next.js auto-upgraded from 15.1.6 → 16.2.4 to resolve CVE-2025-66478 (F-001); Drizzle ORM upgraded to latest patched (resolves SQL-injection advisory). Stack ended on Next.js 16, not 15.
+- `npm run build` passes (Turbopack, 6s compile, 3 static routes)
+- Initial commit: `a47f81a` "Phase 1 step 1: scaffold Next.js 15 + Tailwind v4 + Supabase + Drizzle" (commit message says 15 — actual installed version is 16; minor cosmetic discrepancy, not worth amending)
+
 ---
 
 ## Failures & Resolutions
 
-None this session.
+### F-001 — Next.js 15.1.6 ships with security vulnerability (CVE-2025-66478) — 2026-05-06
+**Issue:** Initial scaffold pinned `next@15.1.6`. `npm install` reported a critical-severity advisory (CVE-2025-66478).
+**Root cause:** Older Next.js patch shipped with a known issue patched in later releases.
+**Fix:** `npm install next@latest eslint-config-next@latest` — resolved to Next 16.2.4. Build still passes.
+**Guardrail:** When pinning Next.js (or any major dep), use the latest stable patch at the time of writing rather than a hand-picked older version. Run `npm audit` immediately after `npm install` and address `high`/`critical` severities before committing.
 
 ---
 
