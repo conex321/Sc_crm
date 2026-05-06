@@ -10,7 +10,9 @@ import { listActivitiesForOpportunity } from "@/lib/crm/activities";
 import { ActivityTimeline } from "@/components/crm/activity-timeline";
 import { NoteComposer } from "@/components/crm/note-composer";
 import { TaskComposer } from "@/components/crm/task-composer";
+import { LineItemsEditor, type LineItem } from "@/components/crm/line-items-editor";
 import { requireUser } from "@/lib/auth/session";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const formatter = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -25,7 +27,38 @@ export default async function OpportunityDetailPage(props: {
   const { id } = await props.params;
   const opp = await getOpportunity(id);
   if (!opp) notFound();
-  const activities = await listActivitiesForOpportunity(id, 50);
+  const sb = await getSupabaseServerClient();
+  const [activities, lineItemsRes, productsRes, packagesRes] = await Promise.all([
+    listActivitiesForOpportunity(id, 50),
+    sb
+      .from("opportunity_line_items")
+      .select(
+        "id, opportunity_id, product_id, package_id, quantity, unit_price, discount_pct, position, product:products(name, sku), pkg:packages(name)",
+      )
+      .eq("opportunity_id", id)
+      .order("position"),
+    sb
+      .from("products")
+      .select("id, sku, name, list_price")
+      .eq("is_active", true)
+      .order("name"),
+    sb
+      .from("packages")
+      .select("id, name, list_price")
+      .eq("is_active", true)
+      .order("name"),
+  ]);
+
+  const lineItems: LineItem[] = (lineItemsRes.data ?? []).map((li) => ({
+    id: li.id,
+    product_id: li.product_id,
+    package_id: li.package_id,
+    quantity: li.quantity,
+    unit_price: li.unit_price,
+    discount_pct: li.discount_pct,
+    product: Array.isArray(li.product) ? li.product[0] : li.product,
+    pkg: Array.isArray(li.pkg) ? li.pkg[0] : li.pkg,
+  }));
 
   return (
     <div className="px-6 py-5">
@@ -85,6 +118,15 @@ export default async function OpportunityDetailPage(props: {
           {format(new Date(opp.updated_at), "PP")}
         </CardContent>
       </Card>
+
+      <div className="mb-5">
+        <LineItemsEditor
+          opportunityId={opp.id}
+          lineItems={lineItems}
+          products={productsRes.data ?? []}
+          packages={packagesRes.data ?? []}
+        />
+      </div>
 
       <h2 className="mb-2 text-xs font-medium uppercase text-muted-foreground">
         Activity
