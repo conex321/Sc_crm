@@ -27,3 +27,21 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - verified: npm run build passes (Turbopack, 6s compile, 3 static routes); npm audit shows 0 high vulns (6 moderate remain in Next-bundled postcss/esbuild — npm cannot fix without breakage)
 - stack-actual: Next.js 16.2.4 (auto-upgraded from 15.1.6 due to CVE-2025-66478), React 19.0.0, Tailwind v4.0, Drizzle 0.45.2 (latest patched), TypeScript 5.7
 - next: Phase 1 step 2 — Supabase schema + migrations (lib/db/schema.ts, drizzle.config.ts, supabase/migrations/0001_initial.sql with RLS scaffolding)
+
+## 2026-05-06T02:00Z — Claude
+- session: 2026-05-06 Phase 1 steps 2-4 (schema + RLS + auth + dashboard shell)
+- decisions_added: []
+- failures_added: [F-002, F-003]
+- files_changed: [lib/db/schema.ts, lib/db/index.ts, drizzle.config.ts, supabase/migrations/0001_rls_and_triggers.sql, supabase/seed/0001_default_pipelines.sql, scripts/apply-sql.mts, lib/supabase/{server,browser,middleware}.ts, lib/auth/session.ts, proxy.ts (renamed from middleware.ts per Next 16), app/(auth)/login/{page.tsx,actions.ts}, app/auth/callback/route.ts, app/auth/sign-out/route.ts, app/(dashboard)/layout.tsx, components/layout/{app-sidebar,top-bar,user-menu,global-search}.tsx, app/layout.tsx (TooltipProvider+Toaster), 19 shadcn/ui components, .env.local (local-only)]
+- commit: (squash with previous step in next commit) — scaffolding done, db live in Supabase project ooanslwrwjexdjwdphes
+- credentials supplied by user via chat (live in `.env.local`, never committed)
+- next: Phase 1 steps 5-8 — CRM pages + notes/tasks + settings + demo seed
+
+## 2026-05-06T03:00Z — Claude
+- session: 2026-05-06 Phase 1 steps 5-8 (CRM pages + notes/tasks + settings + demo seed)
+- decisions_added: []
+- failures_added: []
+- files_changed: [lib/crm/{accounts,contacts,opportunities,activities}.ts, app/(dashboard)/accounts/{page.tsx,actions.ts,new/page.tsx,[id]/page.tsx,[id]/edit/page.tsx,[id]/contacts/{actions.ts,new/page.tsx,[contactId]/edit/page.tsx}}, app/(dashboard)/opportunities/{page.tsx,actions.ts,new/page.tsx,[id]/page.tsx,[id]/edit/page.tsx}, app/(dashboard)/inbox/page.tsx, app/(dashboard)/settings/{page.tsx,users/{page.tsx,actions.ts,role-controls.tsx},pipelines/page.tsx}, app/(dashboard)/activities/actions.ts, components/crm/{account-form,contact-form,contact-list,opportunity-form,opportunity-list,pipeline-board,activity-timeline,note-composer,task-composer}.tsx, supabase/migrations/0002_activity_rpcs.sql, supabase/seed/0002_demo_data.sql]
+- commits: "Phase 1 steps 2-4: schema + RLS + auth + dashboard shell" + "Phase 1 steps 5-8: CRM pages, notes/tasks, settings, demo seed"
+- verified: npm run build → 18 routes, TypeScript clean; npm run dev → ready in 1.2s; all migrations + seeds applied to Supabase
+- next: user signs in → Supabase Google OAuth must be configured in dashboard first (see Open Questions #1). Then real-world Phase 1 stability bake-in begins (D-013).

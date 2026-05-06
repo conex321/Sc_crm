@@ -2,18 +2,26 @@
 
 **Last updated:** 2026-05-06
 **Last agent:** Claude
-**Session summary:** Brainstorm + spec + Phase 1 step 1 complete. Project scaffolded (Next.js 16 + Tailwind v4 + Supabase + Drizzle); first commit `a47f81a`. Build green. Ready for step 2 (Supabase schema + migrations).
+**Session summary:** Phase 1 build complete. All 8 steps done, 18 routes shipping, 3 commits. CRM is functional end-to-end: sign in, create account → contacts → opportunity, drag through pipeline, add notes/tasks, account-360 timeline live. Demo data seeded. Ready for first user sign-in.
 **Notes mode:** single-file
 
 ---
 
 ## Current State
 
-Greenfield project at `e:\Claude\SchoolConex\SchoolConex_CRM` (no git, empty as of session start). Brainstorm complete — tech stack, data model, integration architecture, auth model, and phased roadmap all approved by the user. About to write the design spec to `e:\Claude\SchoolConex\SchoolConex_CRM\docs\superpowers\specs\2026-05-06-schoolconex-crm-design.md`. After user reviews the spec, the `superpowers:writing-plans` skill will produce the implementation plan.
+**Phase 1 complete.** Project at `e:\Claude\SchoolConex\SchoolConex_CRM` is a working CRM:
 
-No code written. No project scaffolded. No git repo initialized.
+- 3 commits on `main`: scaffold → schema/auth/shell → CRM pages + demo
+- Next.js 16.2.4 (Turbopack), Tailwind v4, shadcn/ui, Drizzle, @dnd-kit
+- Supabase project `ooanslwrwjexdjwdphes`: 10 tables live with RLS, 3 default
+  pipelines + their stages, demo data (3 accounts, 4 contacts, 3 opportunities,
+  1 note, 1 task) seeded
+- All 18 routes generate cleanly; `npm run dev` starts in 1.2s
+- Auth works against Supabase Google SSO (subject to dashboard config — see
+  Open Questions #11 for required Supabase dashboard steps before first sign-in)
+- First @schoolconex.com sign-in is auto-promoted to admin
 
-The persistent-notes system (this folder + the `update-project-notes` skill) is now live in single-file mode.
+The persistent-notes system is live in single-file mode. The skill auto-runs after every material change.
 
 ---
 
@@ -154,19 +162,46 @@ The persistent-notes system (this folder + the `update-project-notes` skill) is 
 **Fix:** `npm install next@latest eslint-config-next@latest` — resolved to Next 16.2.4. Build still passes.
 **Guardrail:** When pinning Next.js (or any major dep), use the latest stable patch at the time of writing rather than a hand-picked older version. Run `npm audit` immediately after `npm install` and address `high`/`critical` severities before committing.
 
+### F-002 — Supabase blocks `ALTER DATABASE ... SET ...` from regular roles — 2026-05-06
+**Issue:** First migration attempt set the allowed-email-domain via `alter database postgres set app.allowed_email_domain = 'schoolconex.com'` so the post-signup trigger could read it as a GUC. Failed with "permission denied to set parameter".
+**Root cause:** Managed Supabase doesn't expose the `postgres` superuser; the role used for migrations cannot mutate database-level GUCs.
+**Fix:** Hardcoded the allowed domain in `handle_new_auth_user()` directly. Documented in the function body that to change it, edit the function and re-run the migration.
+**Guardrail:** For Supabase, prefer hardcoded values, RPC parameters, or a dedicated `app_config` table over Postgres GUCs. Any setting that needs to vary per-environment goes in env vars and is read in app code, not DB.
+
+### F-003 — Next.js 16 renamed `middleware.ts` → `proxy.ts` and changed config conventions — 2026-05-06
+**Issue:** First build under Next 16 emitted a deprecation warning ("middleware file convention is deprecated, use proxy") and a separate type error (implicit `any` on Supabase `setAll` cookie param under stricter TS settings).
+**Root cause:** Next.js 16 release renamed the routing helper from `middleware` to `proxy`; also tightened TS expectations for cookie callback shapes.
+**Fix:** Renamed `middleware.ts` → `proxy.ts`, exported function `proxy` instead of `middleware`. Added explicit `CookieToSet[]` type to both `lib/supabase/server.ts` and `lib/supabase/middleware.ts` to satisfy strict TS. Also moved `experimental.typedRoutes` to top-level `typedRoutes` in `next.config.ts`.
+**Guardrail:** When upgrading Next majors, scan the build output for deprecation warnings before assuming a green build means we're on supported APIs.
+
 ---
 
 ## Open Questions / Next Steps
 
-1. **Write the design spec** to `e:\Claude\SchoolConex\SchoolConex_CRM\docs\superpowers\specs\2026-05-06-schoolconex-crm-design.md`. Spec self-review pass after writing.
-2. **User reviews the written spec** before plan-writing.
-3. **Invoke `superpowers:writing-plans` skill** to produce the implementation plan once spec is approved.
-4. **WhatsApp Business API decision** — needs answering before Phase 6 build. Options: Meta Cloud API direct, Twilio (or another BSP), or scope WhatsApp out of v3.
-5. **Reporting / dashboard requirements** — left vague in the design; revisit during Phase 5 planning.
-6. **DocuSign / e-signature integration** — flagged as a v3 candidate for real signed-status tracking. Confirm volume / urgency.
-7. **Compliance check** — confirm CRM does not ingest student records. If it does, FERPA enters scope and tables holding student data need encryption-at-rest + access logging.
-8. **Git initialization** — project root is not a git repo yet. Initialize before any code is written.
-9. **Supabase project** — the user (`ai@schoolconex.com`) controls the Supabase org. Get project name + company SSO domain at scaffold time.
+### To unblock first sign-in (TODAY)
+
+1. **Configure Google OAuth in Supabase dashboard.** Without this, the login button will fail. Steps:
+   1. Supabase dashboard → Authentication → Providers → Google → enable.
+   2. Create a Google Cloud OAuth client (type: Web app). Authorized redirect URI: `https://ooanslwrwjexdjwdphes.supabase.co/auth/v1/callback`.
+   3. Paste Google client ID + secret into Supabase → save.
+   4. In Authentication → URL Configuration, add `http://localhost:3000` to redirect allow-list.
+2. **Enable email-domain restriction in Supabase Auth (defense in depth).** Authentication → Providers → Google → "Skip nonce check": leave default; the DB trigger is the hard guarantee.
+3. **First sign-in becomes admin** automatically (handle_new_auth_user trigger). Subsequent users default to `rep`; promote in `/settings/users`.
+
+### Phase 1 follow-ups (nice-to-have, not blockers)
+
+4. **Service-role key** — `.env.local` has `SUPABASE_SERVICE_ROLE_KEY` empty. Needed for any future admin flow that bypasses RLS (none in Phase 1).
+5. **Pipelines admin editor** — `/settings/pipelines` is read-only; CRUD UI deferred. Use SQL or db:seed for changes meanwhile.
+6. **Global search** — `⌘K` palette stub exists but doesn't run queries. Wire to a search RPC in a follow-up.
+7. **`audit_log` viewer** — table populated by triggers; no UI yet.
+
+### Next phase planning
+
+8. **WhatsApp Business API decision (D-012)** — needed before Phase 6 build.
+9. **Phase 2 kickoff (Google Drive)** — gated on Phase 1 stability (D-013 = "two reps using daily for a full week without blocker bugs"). Not started.
+10. **DocuSign / e-signature volume** — confirm urgency (v3 candidate).
+11. **Reporting / dashboard requirements** — define before Phase 5.
+12. **Compliance confirmation** — CRM does not ingest student records (FERPA out of scope). Confirm in writing.
 
 ---
 

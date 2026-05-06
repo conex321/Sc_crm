@@ -146,4 +146,4 @@ When `sessions/INDEX.md` exceeds 500 lines, archive everything older than 90 day
 ## Stable ID counters (update when assigning new IDs)
 
 - Decisions: D-001 through D-016 assigned (next: D-017)
-- Failures: F-001 assigned (next: F-002)
+- Failures: F-001, F-002, F-003 assigned (next: F-004)
