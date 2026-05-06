@@ -11,6 +11,7 @@ import { ActivityTimeline } from "@/components/crm/activity-timeline";
 import { NoteComposer } from "@/components/crm/note-composer";
 import { TaskComposer } from "@/components/crm/task-composer";
 import { LineItemsEditor, type LineItem } from "@/components/crm/line-items-editor";
+import { SendInvoiceButton } from "@/components/crm/send-invoice-button";
 import { requireUser } from "@/lib/auth/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -105,11 +106,14 @@ export default async function OpportunityDetailPage(props: {
             )}
           </div>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href={`/opportunities/${opp.id}/edit`}>
-            <Pencil className="size-3.5" /> Edit
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <SendInvoiceButton opportunityId={opp.id} />
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/opportunities/${opp.id}/edit`}>
+              <Pencil className="size-3.5" /> Edit
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <Card className="mb-5">
