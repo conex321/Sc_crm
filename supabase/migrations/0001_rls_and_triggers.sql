@@ -79,6 +79,8 @@ $$;
 -- Allowed email domain is hardcoded here. To change it, edit this function and
 -- re-run the migration (Supabase does not permit ALTER DATABASE ... SET ...
 -- from a regular role, so we cannot use a database-level GUC).
+-- First signed-in user is auto-promoted to admin so the team can bootstrap
+-- without out-of-band SQL.
 create or replace function public.handle_new_auth_user()
 returns trigger
 language plpgsql
@@ -93,13 +95,18 @@ declare
     new.raw_user_meta_data ->> 'name',
     split_part(new.email, '@', 1)
   );
+  is_first_user boolean;
+  assigned_role user_role;
 begin
   if email_domain is null or email_domain <> allowed_domain then
     raise exception 'Email domain % not allowed (expected %)', email_domain, allowed_domain;
   end if;
 
+  select count(*) = 0 into is_first_user from public.users;
+  assigned_role := case when is_first_user then 'admin'::user_role else 'rep'::user_role end;
+
   insert into public.users (id, full_name, google_email, role, is_active)
-  values (new.id, display_name, new.email, 'rep', true)
+  values (new.id, display_name, new.email, assigned_role, true)
   on conflict (id) do update
     set google_email = excluded.google_email,
         full_name = coalesce(public.users.full_name, excluded.full_name),
