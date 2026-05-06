@@ -2,24 +2,46 @@
 
 **Last updated:** 2026-05-06
 **Last agent:** Claude
-**Session summary:** Phase 1 build complete. All 8 steps done, 18 routes shipping, 3 commits. CRM is functional end-to-end: sign in, create account → contacts → opportunity, drag through pipeline, add notes/tasks, account-360 timeline live. Demo data seeded. Ready for first user sign-in.
+**Session summary:** All six phases complete. 25 routes, 4 webhook endpoints, 5 Inngest functions, full data model live in Supabase. D-013 (Phase 1 lock-in) was relaxed by user instruction "continue to the rest of the phases". Phases 2-6 are code-complete and ready-to-activate — each requires vendor credentials + webhook URL registration to go live. Build green; build artifacts in .next/.
 **Notes mode:** single-file
 
 ---
 
 ## Current State
 
-**Phase 1 complete.** Project at `e:\Claude\SchoolConex\SchoolConex_CRM` is a working CRM:
+**All six phases code-complete.** Project at `e:\Claude\SchoolConex\SchoolConex_CRM` is the in-house CRM:
 
-- 3 commits on `main`: scaffold → schema/auth/shell → CRM pages + demo
-- Next.js 16.2.4 (Turbopack), Tailwind v4, shadcn/ui, Drizzle, @dnd-kit
-- Supabase project `ooanslwrwjexdjwdphes`: 10 tables live with RLS, 3 default
-  pipelines + their stages, demo data (3 accounts, 4 contacts, 3 opportunities,
-  1 note, 1 task) seeded
-- All 18 routes generate cleanly; `npm run dev` starts in 1.2s
-- Auth works against Supabase Google SSO (subject to dashboard config — see
-  Open Questions #11 for required Supabase dashboard steps before first sign-in)
+- Commits on `main` (8 commits, all phases):
+  1. Scaffold (Next.js 16 + Tailwind v4 + Supabase + Drizzle)
+  2. Schema/auth/shell
+  3. CRM pages + notes/tasks + demo seed (Phase 1 done)
+  4. Notes update
+  5. **Phase 2** Google Drive (OAuth, attach, generate-from-template, status reconcile)
+  6. **Phase 3** Dialpad (webhook, contact match, calls timeline)
+  7. **Phase 4** Catalog & line-item quoting
+  8. **Phase 5** Stripe + Mailshake (webhooks + send-invoice + email events)
+  9. **Phase 6** WhatsApp via Twilio
+- Stack: Next.js 16.2.4 (Turbopack), React 19, Tailwind v4, shadcn/ui, Drizzle 0.45, @dnd-kit, googleapis, stripe, inngest
+- Supabase project `ooanslwrwjexdjwdphes`: full schema live (~22 tables) with RLS on every one, default pipelines + demo data seeded
+- 25 routes building cleanly; 4 webhook endpoints registered; 5 Inngest functions registered
+- Auth works against Supabase Google SSO (subject to dashboard config)
 - First @schoolconex.com sign-in is auto-promoted to admin
+
+**What's *live* today (Phase 1 functional UI):**
+- Sign in → Accounts list / detail-360 (Activity, Contacts, Opportunities, Documents tabs)
+- Opportunities kanban (drag-and-drop) + detail with line-item editor
+- Notes + tasks + activity timeline
+- Settings: Users & roles, Pipelines (read-only), Catalog, Contract templates, Audit log, Integrations
+- Per-rep dashboard with KPI tiles + open tasks
+- Demo data seeded (3 accounts, 4 contacts, 3 opportunities, 1 note + task)
+
+**What's *code-complete but inert* until you provide vendor credentials:**
+- Google Drive integration (Phase 2) — needs Google Cloud OAuth client + service account
+- Dialpad call ingestion (Phase 3) — needs DIALPAD_API_KEY + webhook registered in Dialpad
+- Stripe payment events + outbound invoicing (Phase 5) — needs STRIPE_SECRET_KEY + webhook
+- Mailshake email events (Phase 5) — needs MAILSHAKE_API_KEY + webhook
+- WhatsApp via Twilio (Phase 6) — needs TWILIO_AUTH_TOKEN + Messaging webhook
+- Inngest itself — runs locally with `npx inngest-cli@latest dev`; prod needs INNGEST_EVENT_KEY + SIGNING_KEY
 
 The persistent-notes system is live in single-file mode. The skill auto-runs after every material change.
 
@@ -107,6 +129,16 @@ The persistent-notes system is live in single-file mode. The skill auto-runs aft
 **Decision:** Every table includes: `created_at`, `updated_at` (touched by trigger), `created_by` (uuid → users, nullable for system inserts), `updated_by` (uuid → users, nullable). Customer-facing entities (`accounts`, `contacts`, `opportunities`, `documents`) additionally include `deleted_at` for soft delete (RLS predicate hides soft-deleted rows from `rep` and `manager`; `admin` can see them).
 **Why:** Consistency across tables, audit trail without a separate event-source table, soft delete prevents accidental data loss.
 **Alternatives considered:** Audit-log-only (rejected — joining for "who last edited this row" is annoying); no audit columns (rejected — no accountability).
+
+### D-017 — Phase 1 lock-in (D-013) relaxed by user instruction — 2026-05-06
+**Decision:** Continue past Phase 1 into Phases 2-6 in this same session. User explicitly said "continue to the rest of the phases" after Phase 1 was committed. D-013 ("no Phase 2 work until Phase 1 stable in real use") was overridden by direct user request.
+**Why:** User wants the full system code-complete in one push; vendor credentials will land asynchronously. Risk accepted: Phase 1 hasn't had its full week of two-rep daily use, but no production data is at stake.
+**How to apply:** Each phase 2-6 is delivered as code-complete + DB schema + webhook endpoints. Activation requires vendor credentials + webhook URL registration on the vendor side. None of the integrations will fire without real credentials.
+
+### D-018 — Activity inserts from integrations bypass RLS via Drizzle — 2026-05-06
+**Decision:** Webhook handlers and Inngest job code use the server-only Drizzle client (DATABASE_URL = postgres role) to insert activities + child rows. This bypasses RLS, which is correct because webhooks have already been signature-verified and the system has no user identity to enforce against. App-code paths (Server Actions called from UI) still go through Supabase server client → RLS-enforced.
+**Why:** RLS predicates require auth.uid(); webhook context has no user, and we don't want to weaken RLS to "allow anonymous inserts on activities" (would be a security regression).
+**How to apply:** Use `recordActivity()` from `lib/integrations/record-activity.ts` for any future integration that needs to write activities. Do NOT call it from UI Server Actions.
 
 ### D-016 — UI direction: sidebar-first compact CRM/dashboard — 2026-05-06
 **Decision:** Sidebar-first navigation (collapsible, primary entities: Accounts, Opportunities, Settings). Top utility bar for global search, quick-create, user menu. Compact typography (small base font, dense tables, low-padding cards). CRM/dashboard information density, not a marketing-style layout. shadcn/ui components used with reduced paddings.

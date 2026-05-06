@@ -45,3 +45,53 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - commits: "Phase 1 steps 2-4: schema + RLS + auth + dashboard shell" + "Phase 1 steps 5-8: CRM pages, notes/tasks, settings, demo seed"
 - verified: npm run build → 18 routes, TypeScript clean; npm run dev → ready in 1.2s; all migrations + seeds applied to Supabase
 - next: user signs in → Supabase Google OAuth must be configured in dashboard first (see Open Questions #1). Then real-world Phase 1 stability bake-in begins (D-013).
+
+## 2026-05-06T04:00Z — Claude
+- session: 2026-05-06 Phases 2-6 code-complete push (after user override of D-013)
+- decisions_added: [D-017, D-018]
+- failures_added: []
+- files_changed:
+    Phase 2 (Drive): supabase/migrations/0003_phase2_to_6_rls.sql,
+      lib/integrations/google/{oauth,drive}.ts,
+      app/api/google-drive/connect/route.ts,
+      app/auth/google-drive-callback/route.ts,
+      lib/crm/documents.ts,
+      app/(dashboard)/documents/actions.ts,
+      components/crm/{document-list,drive-attach-button,generate-contract-dialog}.tsx,
+      app/(dashboard)/settings/{integrations,templates}/page.tsx,
+      app/(dashboard)/dashboard/page.tsx,
+      app/(dashboard)/settings/{catalog,audit}/page.tsx,
+      inngest/{client.ts,functions/{index,drive-status-reconcile}.ts},
+      app/api/inngest/route.ts
+    Phase 3 (Dialpad): lib/integrations/{contact-matcher,record-activity,dialpad}.ts,
+      app/api/webhooks/dialpad/route.ts,
+      inngest/functions/dialpad-process-event.ts
+    Phase 4 (Catalog): app/(dashboard)/settings/catalog/{actions.ts,
+      products/{new,[id]/edit}/page.tsx, packages/{new,[id]/edit}/page.tsx},
+      components/crm/{product-form,line-items-editor}.tsx,
+      app/(dashboard)/opportunities/[id]/{page.tsx,line-items/actions.ts}
+    Phase 5 (Stripe + Mailshake): lib/integrations/{stripe,mailshake}.ts,
+      app/api/webhooks/{stripe,mailshake}/route.ts,
+      inngest/functions/{stripe-process-event,mailshake-process-event}.ts,
+      app/(dashboard)/opportunities/[id]/invoice/actions.ts,
+      components/crm/send-invoice-button.tsx
+    Phase 6 (WhatsApp via Twilio): lib/integrations/twilio.ts,
+      app/api/webhooks/whatsapp/route.ts,
+      inngest/functions/whatsapp-process-event.ts
+    Schema additions: lib/db/schema.ts grew documents, contract_templates,
+      integration_credentials, integration_events_raw, calls, messages,
+      email_events, contract_events, payments, products, packages,
+      package_items, opportunity_line_items + 5 enums
+- commits:
+    "Phase 2: Google Drive integration (code-complete)"
+    "Phase 3: Dialpad webhook + call ingestion (code-complete)"
+    "Phase 4: Catalog & line-item quoting"
+    "Phase 5: Stripe + Mailshake integrations (code-complete)"
+    "Phase 6: WhatsApp via Twilio + final wiring"
+- verified: npm run build passes after each phase commit; 25 routes total;
+  4 webhook endpoints (dialpad, mailshake, stripe, whatsapp);
+  5 Inngest functions registered
+- next: vendor credential setup per .env.example, then end-to-end testing
+  with a sandboxed integration of each vendor (Stripe test mode, Twilio
+  sandbox, Mailshake test campaign, Dialpad test webhook). The activation
+  checklist for each integration is in the corresponding commit message.
