@@ -1,4 +1,4 @@
-import { signInWithGoogle } from "./actions";
+import { signInWithGoogle, signInWithEmailPassword } from "./actions";
 import { Suspense } from "react";
 
 export default async function LoginPage(props: {
@@ -21,13 +21,22 @@ export default async function LoginPage(props: {
 
         {error === "domain" && (
           <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
-            That Google account isn&apos;t on the @schoolconex.com domain. Try a different
-            account.
+            That account isn&apos;t on the @schoolconex.com domain.
           </div>
         )}
         {error === "exchange" && (
           <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
             We couldn&apos;t complete sign-in. Please try again.
+          </div>
+        )}
+        {error === "credentials" && (
+          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+            Wrong email or password.
+          </div>
+        )}
+        {error === "missing" && (
+          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+            Email and password are required.
           </div>
         )}
         {reason === "inactive" && (
@@ -37,6 +46,38 @@ export default async function LoginPage(props: {
         )}
 
         <Suspense>
+          <form action={signInWithEmailPassword} className="grid gap-2">
+            <input type="hidden" name="next" value={next} />
+            <input
+              type="email"
+              name="email"
+              required
+              placeholder="you@schoolconex.com"
+              autoComplete="email"
+              className="h-9 rounded-md border bg-background px-2 text-xs"
+            />
+            <input
+              type="password"
+              name="password"
+              required
+              placeholder="Password"
+              autoComplete="current-password"
+              className="h-9 rounded-md border bg-background px-2 text-xs"
+            />
+            <button
+              type="submit"
+              className="h-9 rounded-md bg-primary text-xs font-medium text-primary-foreground hover:opacity-90"
+            >
+              Sign in
+            </button>
+          </form>
+
+          <div className="my-4 flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[10px] uppercase text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <form action={signInWithGoogle}>
             <input type="hidden" name="next" value={next} />
             <button
@@ -50,7 +91,7 @@ export default async function LoginPage(props: {
         </Suspense>
 
         <p className="mt-6 text-center text-[11px] text-muted-foreground">
-          Internal use only · ai@schoolconex.com
+          Internal use only · @schoolconex.com only
         </p>
       </div>
     </div>

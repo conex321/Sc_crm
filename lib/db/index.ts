@@ -14,4 +14,7 @@ const queryClient = postgres(process.env.DATABASE_URL, {
 });
 
 export const db = drizzle(queryClient, { schema });
+export async function closeDb() {
+  await queryClient.end();
+}
 export { schema };

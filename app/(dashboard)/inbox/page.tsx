@@ -8,9 +8,8 @@ export default async function UnmatchedInboxPage() {
       <div className="mb-4">
         <h1 className="text-lg font-semibold tracking-tight">Unmatched inbox</h1>
         <p className="text-xs text-muted-foreground">
-          Inbound calls and messages whose phone number or email didn&apos;t match a known
-          contact. Will populate once Dialpad / WhatsApp / Mailshake integrations land
-          (Phase 3+).
+          Calls, messages, and email events whose phone number or email didn&apos;t
+          match a known contact. Click an item to associate it with a contact.
         </p>
       </div>
       <ActivityTimeline activities={activities} />

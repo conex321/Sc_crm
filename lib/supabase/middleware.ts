@@ -9,7 +9,9 @@ const PUBLIC_PATHS = [
   "/auth/sign-out",
   "/_next",
   "/favicon.ico",
+  "/api/inngest",
   "/api/health",
+  "/api/webhooks",
 ];
 
 export async function updateSession(request: NextRequest) {

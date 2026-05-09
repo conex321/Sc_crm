@@ -320,6 +320,54 @@ export const emailEvents = pgTable("email_events", {
   eventType: text("event_type"),
 });
 
+// ─── mailshake_campaigns (Phase 5 — campaign metadata sync) ───────────
+export const mailshakeCampaigns = pgTable("mailshake_campaigns", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mailshakeId: text("mailshake_id").notNull().unique(),
+  title: text("title").notNull(),
+  isArchived: boolean("is_archived").notNull().default(false),
+  isPaused: boolean("is_paused").notNull().default(false),
+  wizardStatus: text("wizard_status"),
+  senderEmail: text("sender_email"),
+  senderName: text("sender_name"),
+  url: text("url"),
+  mailshakeCreatedAt: timestamp("mailshake_created_at", { withTimezone: true }),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+  ...auditCols,
+});
+
+// ─── mailshake_leads (Phase 5 — per-recipient lead status per campaign) ──
+// status mirrors Mailshake lead status (open / clicked / replied / bounced / lost / won).
+export const mailshakeLeads = pgTable(
+  "mailshake_leads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mailshakeLeadId: text("mailshake_lead_id").notNull().unique(),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => mailshakeCampaigns.id, { onDelete: "cascade" }),
+    mailshakeCampaignId: text("mailshake_campaign_id").notNull(),
+    recipientId: text("recipient_id"),
+    email: text("email").notNull(),
+    fullName: text("full_name"),
+    schoolName: text("school_name"),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    status: text("status").notNull(),
+    isPaused: boolean("is_paused").notNull().default(false),
+    openedAt: timestamp("opened_at", { withTimezone: true }),
+    lastStatusChangeAt: timestamp("last_status_change_at", { withTimezone: true }),
+    annotation: text("annotation"),
+    assignedToEmail: text("assigned_to_email"),
+    fields: jsonb("fields").notNull().default({}),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+    ...auditCols,
+  },
+  (t) => [
+    uniqueIndex("mailshake_leads_campaign_email_idx").on(t.mailshakeCampaignId, t.email),
+  ],
+);
+
 // ─── contract_events (Phase 2+ child) ─────────────────────────────────
 export const contractEvents = pgTable("contract_events", {
   activityId: uuid("activity_id")
@@ -453,5 +501,9 @@ export type NewOpportunityLineItem = typeof opportunityLineItems.$inferInsert;
 export type Call = typeof calls.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type EmailEvent = typeof emailEvents.$inferSelect;
+export type MailshakeCampaign = typeof mailshakeCampaigns.$inferSelect;
+export type NewMailshakeCampaign = typeof mailshakeCampaigns.$inferInsert;
+export type MailshakeLead = typeof mailshakeLeads.$inferSelect;
+export type NewMailshakeLead = typeof mailshakeLeads.$inferInsert;
 export type ContractEvent = typeof contractEvents.$inferSelect;
 export type Payment = typeof payments.$inferSelect;

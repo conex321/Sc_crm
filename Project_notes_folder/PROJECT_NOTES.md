@@ -1,9 +1,9 @@
 # Project Notes — SchoolConex CRM
 
-**Last updated:** 2026-05-06
-**Last agent:** Claude
-**Session summary:** All six phases complete. 25 routes, 4 webhook endpoints, 5 Inngest functions, full data model live in Supabase. D-013 (Phase 1 lock-in) was relaxed by user instruction "continue to the rest of the phases". Phases 2-6 are code-complete and ready-to-activate — each requires vendor credentials + webhook URL registration to go live. Build green; build artifacts in .next/.
-**Notes mode:** single-file
+**Last updated:** 2026-05-09
+**Last agent:** Codex
+**Session summary:** Mailshake full verification completed. Live sync exits cleanly and still reports 29 campaigns / 305 leads / 301 matched leads; `/campaigns`, `/campaigns/930352`, account Campaigns tab, `/settings/integrations`, Inngest cron, and public webhook smoke all pass. Fixed F-010 (Mailshake CLI DB shutdown) and F-011 (`/campaigns` default count + integration matched-count display). Gmail mailbox ingestion for Rayan remains blocked by F-006.
+**Notes mode:** single-file (line count <500)
 
 ---
 
@@ -35,13 +35,24 @@
 - Per-rep dashboard with KPI tiles + open tasks
 - Demo data seeded (3 accounts, 4 contacts, 3 opportunities, 1 note + task)
 
-**What's *code-complete but inert* until you provide vendor credentials:**
-- Google Drive integration (Phase 2) — needs Google Cloud OAuth client + service account
-- Dialpad call ingestion (Phase 3) — needs DIALPAD_API_KEY + webhook registered in Dialpad
-- Stripe payment events + outbound invoicing (Phase 5) — needs STRIPE_SECRET_KEY + webhook
-- Mailshake email events (Phase 5) — needs MAILSHAKE_API_KEY + webhook
-- WhatsApp via Twilio (Phase 6) — needs TWILIO_AUTH_TOKEN + Messaging webhook
-- Inngest itself — runs locally with `npx inngest-cli@latest dev`; prod needs INNGEST_EVENT_KEY + SIGNING_KEY
+**Integration activation status:**
+- **Dialpad call ingestion** — ✅ ACTIVATED. Company-admin API key in `DIALPAD_API_KEY`. Filter pinned to Rayan (user_id `6598548464648192`, `rayan@schoolconex.com`, +1 437 523 4132). 96 calls already in DB (72 inbound / 24 outbound). Inngest cron `dialpad-sync-rayan` runs `*/10 min` for ongoing sync. Webhook handler also filters to Rayan if anyone wires the webhook. Validation on 2026-05-07: `scripts/dialpad-list-calls.mts 3` returned 3 recent records through `user_id=6598548464648192`; outbound samples include `target_email:"rayan@schoolconex.com"`.
+- **Google Drive integration** — ✅ LIVE end-to-end. Project `schoolconex-crm` under schoolconex.com org. OAuth Web client + service account credentials in `.env.local`. Shared Drive "SchoolConex CRM" (id `0AFnM-2HvmqO2Uk9PVA`) hosts both folders: `CRM Templates` (`1T7ItO_S8O4sGsnftj3kWz04L1R0fJQPo`) + `CRM Generated` (`1NR8wyn013tPE2NLWl4ke5OSc4UDJiXZj`). SA `schoolconex-crm-drive@schoolconex-crm.iam.gserviceaccount.com` is organizer (Content Manager) on the Shared Drive — added via OAuth loopback flow as matthew@schoolconex.com. Smoke test passes full create/delete cycle. F-005 resolved via D-027.
+- **Gmail mailbox ingestion** — 🚫 NOT AUTHORIZED YET. A direct service-account impersonation probe for `rayan@schoolconex.com` using scope `https://www.googleapis.com/auth/gmail.readonly` returns `401 unauthorized_client`. Needs either Workspace Domain-Wide Delegation for the service account + Gmail scope, or a per-user OAuth flow where Rayan grants Gmail read access. See F-006.
+- **Stripe** — code-complete, needs `STRIPE_SECRET_KEY` + webhook secret
+- **Mailshake** — ✅ LIVE for lead-pipeline polling. `MAILSHAKE_API_KEY` set in `.env.local`. Inngest cron `mailshake-sync-campaigns` (every 30 min) pulls all campaigns + per-recipient lead status. Verified 2026-05-09: 29 campaigns, 305 engaged leads (288 open / 13 ignored / 4 closed), 301/305 matched to CRM accounts (98.7%), 274 accounts with Mailshake leads, zero broken campaign/account links, and campaign `930352` has 110 leads / 107 schools. UI: `/campaigns` defaults to all campaigns, `/campaigns/[id]`, Campaigns tab on account detail, Mailshake card on `/settings/integrations` with Live + matched-count display. ⚠️ Real-time email events (sent/opened/clicked/replied/bounced) and reply text still require webhook registration in Mailshake → Account → Webhooks (handler wired at `/api/webhooks/mailshake` and is public per D-029). `MAILSHAKE_WEBHOOK_SECRET` currently empty — handler accepts unsigned events until set.
+- **WhatsApp via Twilio** — code-complete, needs `TWILIO_AUTH_TOKEN` + WhatsApp number
+- **Inngest** — ✅ local endpoint verified in dev mode. `.env.local` has `INNGEST_DEV=1`; production must unset that and use `INNGEST_EVENT_KEY` + `INNGEST_SIGNING_KEY`. `GET /api/inngest` returned metadata with `function_count:6`, `mode:"dev"` on a production-server smoke.
+
+**Sign-in for testing (local):**
+- `demo@schoolconex.com` / `Test1234!` — admin role, was the very first row in `public.users`. Created via direct SQL into `auth.users` + `auth.identities` with `crypt(... , gen_salt('bf'))` + `email_confirmed_at` set so no email confirmation needed.
+- Email/password fallback was added to `/login` (alongside Google SSO) to enable local testing without configuring Supabase's Google provider. Also reads `?error=credentials|missing|domain` query param.
+- Rayan@schoolconex.com auth user was created earlier and then deleted (user clarified demo was the only sign-in identity needed).
+
+**Browser automation infrastructure:**
+- Playwright + persistent Chrome profile at `.playwright-profile/` (gitignored).
+- Long-running Chrome over CDP (`scripts/browser-launch.mts`, port 9222) lets dozens of small `scripts/gcp-*.mts` scripts navigate / probe / click without re-authenticating.
+- Screenshot library at `.playwright-shots/` for verification (gitignored).
 
 The persistent-notes system is live in single-file mode. The skill auto-runs after every material change.
 
@@ -145,21 +156,114 @@ The persistent-notes system is live in single-file mode. The skill auto-runs aft
 **Why:** Reps need information density. Marketing-style large-padding layouts waste screen real estate when scanning hundreds of records.
 **Alternatives considered:** Top-nav-only (rejected — sidebar communicates entity hierarchy better); standard shadcn defaults (rejected — too airy for a CRM).
 
----
+### D-019 — Dialpad activated via poll-sync, not webhook — 2026-05-06
+**Decision:** For local/dev (and as primary path until production webhook URL is registered), Dialpad call ingestion runs via Inngest cron `dialpad-sync-rayan` (`*/10 min`) hitting `GET /api/v2/call?user_id=...&started_after=<epoch_ms>&limit=50`. Watermark = max(`received_at`) on `integration_events_raw` minus 60s for clock skew. The webhook handler at `/api/webhooks/dialpad` continues to exist and remains idempotent — both paths share the same `integration_events_raw` dedup index on `(provider, event_id)`.
+**Why:** Webhooks need a public URL (ngrok / deployed). Polling works against any environment. Dialpad's `/call` endpoint requires a company-admin API key (not user-tier — see F-005 / earlier 401 explorations).
+**How to apply:** In `.env.local`, set `DIALPAD_API_KEY` to a company-admin key (not a personal-token JWT). Set `DIALPAD_FILTER_USER_ID` (currently `6598548464648192` for Rayan).
+**Constraints:** Dialpad caps `limit` at 50 per page (we paginate via cursor). Duration field is in **milliseconds** (not seconds) — convert via `Math.round(c.duration / 1000)` before storing in `calls.duration_seconds` (smallint). Recording URL lives at `recording_details[0].url`, not `recording_url[0]`.
+
+### D-020 — Internal calls (Workspace ↔ Workspace) tagged but still ingested — 2026-05-06
+**Decision:** When a Dialpad call's `contact.email` ends with `@schoolconex.com`, mark the activity summary with `· internal` suffix and skip phone-to-contact matching (the other party is a coworker, not a CRM contact). Still ingest the call so the timeline + audit trail is complete.
+**Why:** Rayan ↔ Matthew calls were polluting the unmatched inbox + contact-match attempts. Internal calls don't belong on a customer account anyway.
+**How to apply:** Filter logic in `inngest/functions/dialpad-sync-rayan.ts` and `scripts/dialpad-backfill.mts`. The `· internal` label is in the activity summary; UI can suppress these later if desired.
+
+### D-021 — Demo user created via direct SQL into auth.users — 2026-05-06
+**Decision:** For local testing without configuring Supabase's Google provider, create a sign-in user via direct INSERT into `auth.users` (with `crypt(password, gen_salt('bf'))` and `email_confirmed_at = now()`) plus a matching `auth.identities` row with `provider='email'`. The post-signup trigger fires and creates the `public.users` row; first user gets role `admin`.
+**Demo creds:** `demo@schoolconex.com` / `Test1234!`. Idempotent SQL at `scripts/create-demo-user.sql` + tsx wrapper at `scripts/run-demo-user.mts`.
+**Why:** Email/password fallback on `/login` (also added) lets us test full pages without external Google OAuth setup. Once the user configures Supabase's Google provider, real Google sign-in works alongside the form.
+**How to apply:** Run `npx tsx scripts/run-demo-user.mts` to create or refresh. NEVER do this in production — the password hash sits in DB.
+
+### D-022 — Email/password sign-in form added alongside Google SSO — 2026-05-06
+**Decision:** `/login` page now shows email + password fields above the Google button, separated by an "or" divider. Server Action `signInWithEmailPassword` validates domain (`@schoolconex.com`), calls `supabase.auth.signInWithPassword`, redirects on error to `/login?error=credentials|missing|domain`.
+**Why:** Local development testing without Google provider configured. Useful as a fallback for production if SSO breaks. Does NOT bypass any RLS / role checks — same auth surface.
+**How to apply:** Disable in production by removing the form (or gate behind `NODE_ENV !== 'production'`) once Supabase Google provider is configured. Or keep both, since they share identity.
+
+### D-023 — Browser automation via Playwright + persistent Chrome over CDP — 2026-05-06
+**Decision:** For tasks that need GCP / Drive / dashboard interaction, launch a long-running headed Chromium with the user's installed Chrome (`channel: "chrome"`) using a persistent profile dir at `.playwright-profile/` and `--remote-debugging-port=9222`. Many small one-shot scripts under `scripts/gcp-*.mts` connect via `chromium.connectOverCDP("http://127.0.0.1:9222")`, do an action, save a screenshot to `.playwright-shots/`, and disconnect.
+**Why:** Single source of session state (cookies, login). User can manually intervene in the same window. Each script stays small + composable.
+**Constraints:**
+  - Downloads triggered via JS click sometimes don't fire `page.waitForEvent("download")` over CDP — use a polling-Downloads-folder fallback OR install the listener BEFORE the click. Service-account JSON download worked with the BEFORE-click listener.
+  - Material radio buttons need `radio.check({ force: true })` (Playwright's role-aware path) — DOM `.click()` triggers visual but not Material's binding.
+  - "Email addresses" chip-input style fields: walk `mat-form-field` → label match → child `input` and `fill()` via Playwright (not `keyboard.type`) for reliable input event dispatch.
+  - GCP "Create credentials" / chip-input shows a global Search bar combobox at the same role; SCOPE selectors to the form region or you'll click search.
+
+### D-024 — Drive integration project: schoolconex-crm under SchoolConex Workspace, NOT personal Gmail — 2026-05-06
+**Decision:** GCP project for the Drive integration is `schoolconex-crm` (project number `489266381443`), created under the **schoolconex.com** organization while signed in as **matthew@schoolconex.com**. Earlier work was accidentally done under matthewsefati@gmail.com (project `gmail-mcp-personal-495520`); user explicitly course-corrected mid-session and that work was discarded (see F-003).
+**Why:** Drive integration is a SchoolConex business resource, not personal. Living under the company Workspace org gives admin oversight, billing, and the ability to use Internal-mode OAuth consent (no app verification needed for `@schoolconex.com` users).
+**How to apply:** All Google credentials in `.env.local` reference this project. If anything mentions `gmail-mcp-personal`, it's stale.
+
+### D-025 — OAuth consent screen: Internal user type — 2026-05-06
+**Decision:** Configured the OAuth consent screen for `schoolconex-crm` as **Internal** user type. Internal means only `@schoolconex.com` Workspace accounts can authenticate; no test-user list maintenance, no app verification by Google needed.
+**Why:** Workspace org membership IS the auth gate. Avoids the test-user-cap-100 limit and consent-screen verification flow. Keeps onboarding one-click for any rep on the domain.
+**How to apply:** If we ever want non-`@schoolconex.com` users to authenticate (external clients, partners), we'd need to switch to External + go through verification. Don't.
+
+### D-026 — Drive folders owned by service account; Workspace user shared as writer — 2026-05-06
+**Decision:** Both `CRM Templates` and `CRM Generated` folders were created via the service account (programmatically, via Drive API). Each is shared with `matthew@schoolconex.com` as `writer`. They appear in his Drive under "Shared with me".
+**Why:** Folders don't consume storage, so SA-owned folders don't trigger the storage-quota issue (D-026 caveat / F-004). Sharing as writer means Matthew can drop templates in.
+**Caveat:** Files INSIDE these folders, when created by the SA, charge against the SA's storage quota — which is 0. So the "generate contract from template" flow (which copies a Doc) currently fails with `storageQuotaExceeded`. See F-004 for the two production fix options (Shared Drive OR Domain-Wide Delegation).
+**Status:** SUPERSEDED by D-027. The pre-Shared-Drive folder IDs are commented out in `.env.local` for reference.
+
+### D-027 — F-005 fix: SchoolConex CRM Shared Drive hosts both folders — 2026-05-07
+**Decision:** Created a new Shared Drive named "SchoolConex CRM" (id `0AFnM-2HvmqO2Uk9PVA`) under the schoolconex.com org via the Drive UI as `matthew@schoolconex.com`. Added the SA `schoolconex-crm-drive@schoolconex-crm.iam.gserviceaccount.com` as `organizer` (Content Manager) on the Shared Drive via Drive REST API `permissions.create` with `supportsAllDrives:true`, authenticated through a one-shot OAuth loopback flow (`access_type=online`, no refresh token persisted). New folders created inside the Shared Drive: `CRM Templates` (`1T7ItO_S8O4sGsnftj3kWz04L1R0fJQPo`) + `CRM Generated` (`1NR8wyn013tPE2NLWl4ke5OSc4UDJiXZj`). `.env.local` updated; legacy My-Drive folder IDs preserved as `*_LEGACY` comments. Selected Option A from F-005 because (a) Shared Drive needs zero ongoing impersonation gymnastics, (b) doesn't require admin.google.com domain-wide-delegation config, and (c) survives an SA rotation cleanly.
+**Why:** Files in a Shared Drive are owned by the Drive itself, not by the creating principal — so the SA's 0 personal storage quota never matters. This unblocks the "generate contract from template" flow (and any future SA-as-writer pattern).
+**How to apply (for future agents):**
+- All Drive API calls that touch CRM Templates / CRM Generated (or any descendant) MUST pass `supportsAllDrives: true` (and for `files.list`, additionally `includeItemsFromAllDrives: true`, `corpora: "drive"`, `driveId: GOOGLE_DRIVE_SHARED_DRIVE_ID`). See `scripts/drive-smoke.mts` and `scripts/drive-create-folders-in-sd.mts` for the canonical invocation.
+- When `lib/integrations/google/drive.ts` (or wherever the contract-generation flow lives) is implemented, set `supportsAllDrives: true` everywhere, AND when copying templates use the Shared Drive folder as the parent.
+- The OAuth Web client at `489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n` now has TWO authorized redirect URIs: `http://localhost:3000/auth/google-drive-callback` (for Supabase / app-level Drive OAuth — was pre-existing) and `http://localhost:53682/oauth/callback` (for the loopback admin-task flow). Both are needed; don't delete either.
+
+### D-028 — Smoke scripts track current redirects + Rayan Dialpad email fields — 2026-05-07
+**Decision:** Keep the validation scripts aligned with current runtime behavior: authenticated `/login` is expected to redirect to `/accounts`, `/settings` redirects to `/settings/users`, and `/inbox` cards currently render call summaries/durations/internal tags rather than raw phone numbers. `scripts/dialpad-list-calls.mts` now prints `target_email`, `target_phone`, `contact_email`, and `contact_phone` so Rayan targeting can be proven from Dialpad payloads without inspecting the full record.
+**Why:** The app behavior was correct but smoke scripts were failing on stale expectations, which hid the useful validation signal. The Dialpad list script now makes `target.email=rayan@schoolconex.com` visible in compact output.
+
+### D-029 — External integration callbacks bypass app auth — 2026-05-08
+**Decision:** `PUBLIC_PATHS` in `lib/supabase/middleware.ts` includes `/api/webhooks` and `/api/inngest`. User-facing app pages and app-owned APIs stay protected; third-party callback endpoints do their own signature/payload validation.
+**Why:** Full verification showed unauthenticated webhook POSTs were redirected to `/login` before reaching the route handlers. Dialpad/Mailshake/Stripe/Twilio and Inngest cannot supply a Supabase session cookie, so middleware auth must not gate those callback surfaces.
+
+### D-031 — Mailshake polling = lead pipeline only; events via webhook — 2026-05-09
+**Decision:** Activate Mailshake in two layers. Layer 1 (live now): a 30-min Inngest cron `mailshake-sync-campaigns` calls `GET /campaigns/list` + `GET /leads/list?campaignID=<id>` per non-archived campaign and upserts into `mailshake_campaigns` and `mailshake_leads`. This gives the lead-pipeline status per recipient (`open` / `closed` / `ignored`). Layer 2 (pending webhook setup in Mailshake): real-time per-event firehose (sent / opened / clicked / replied / bounced incl. reply body) flows via `/api/webhooks/mailshake` → `email_events` → activity timeline. UI surfaces Layer 1 in `/campaigns` + `/campaigns/[id]` + the Campaigns tab on account detail, with a banner explaining Layer 2 activation.
+**Why:** Mailshake's REST API does not expose per-event endpoints (probed `/sentEmails`, `/opens`, `/clicks`, `/replies`, `/messages` — all 404). Polling can only reflect the lead-pipeline status. Webhooks are the only path for actual event tracking. The handler already exists, so activation is a one-time URL registration in the Mailshake dashboard.
+**How to apply:** Run `npm run mailshake:sync` to manually trigger Layer 1. Register `https://<deployed-host>/api/webhooks/mailshake` in Mailshake → Account → Webhooks for events `sent`, `open`, `click`, `reply`, `bounce`, then set `MAILSHAKE_WEBHOOK_SECRET` in env. Use `tsx --conditions=react-server` for any tsx script that imports the libs that pull `server-only` (the `react-server` condition resolves the package to its no-op `empty.js`).
+
+### D-032 — Auto-import schools from Mailshake `recipient.fields.account` — 2026-05-09
+**Decision:** When a lead row's `recipient.fields.account` (Mailshake's school-name field) doesn't match any CRM account, auto-create the account with `name = trim(fields.account)`, `type = 'school'`, `source = 'mailshake'`, then re-match leads. Idempotent (case-insensitive name dedup against existing accounts). Wired as `npm run mailshake:import-accounts` (with `--dry` for preview). First run created 274 accounts, lifted match rate from 0/305 to 301/305 (98.7%).
+**Why:** Mailshake recipients are pre-existing in Mailshake but the CRM started empty. Manually creating 274 schools is friction; auto-import makes the per-school view immediately useful.
+**How to apply:** Run after every meaningful Mailshake sync that introduces new schools. Reversible: `delete from public.accounts where source='mailshake' and not exists (select 1 from contacts c where c.account_id = accounts.id)`.
+
+### D-030 — Local Inngest verification uses `INNGEST_DEV=1` — 2026-05-08
+**Decision:** Added `server-only` as an explicit dependency and set `INNGEST_DEV=1` in `.env.local` for local verification. `.env.example` documents that production must unset `INNGEST_DEV` and use `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY`.
+**Why:** `GET /api/inngest` returned 500 in local production-server smoke until Inngest was told to run in local dev mode. With `INNGEST_DEV=1`, the endpoint returns metadata (`function_count:6`, `mode:"dev"`).
 
 ## File & Directory Map
 
-- `e:\Claude\SchoolConex\SchoolConex_CRM\` — project root (greenfield)
-- `e:\Claude\SchoolConex\SchoolConex_CRM\Project_notes_folder\` — this notes folder
+- `e:\Claude\SchoolConex\SchoolConex_CRM\` — project root (Next.js 16 + Supabase + Drizzle CRM, ~25 routes, 9 commits)
+- `Project_notes_folder/` — persistent notes (single-file mode)
   - `PROJECT_NOTES.md` — this file
   - `CHANGELOG.md` — append-only audit log
-- `e:\Claude\SchoolConex\SchoolConex_CRM\.claude\skills\update-project-notes\SKILL.md` — auto-invoked notes skill (Claude)
-- `e:\Claude\SchoolConex\SchoolConex_CRM\.codex\skills\update-project-notes\SKILL.md` — auto-invoked notes skill (Codex)
-- `e:\Claude\SchoolConex\SchoolConex_CRM\test.md` — empty file user opened in IDE; ignore
-- Pending creation:
-  - `e:\Claude\SchoolConex\SchoolConex_CRM\docs\superpowers\specs\2026-05-06-schoolconex-crm-design.md` — final design spec
+- `.claude/skills/update-project-notes/SKILL.md` + `.codex/skills/update-project-notes/SKILL.md` — auto-invoked notes skill
+- `docs/superpowers/specs/2026-05-06-schoolconex-crm-design.md` — final design spec, source of truth
+- `app/`, `components/`, `lib/`, `inngest/`, `supabase/migrations/` — main app code (see spec for layout)
+- `scripts/` — operational scripts:
+  - `apply-sql.mts` / `run-demo-user.mts` / `run-rayan-user.mts` / `remove-rayan-user.mts` — DB ops
+  - `dialpad-{lookup-user,list-calls,backfill}.mts` — Dialpad ops (`npm run dialpad:*`)
+  - `check-calls.mts` — DB inspection
+  - `e2e-rayan.mts` + `e2e-inbox-check.mts` — programmatic e2e auth + render tests
+  - `browser-launch.mts` — long-running headed Chrome over CDP, port 9222
+  - `gcp-*.mts` (~15 scripts) — small one-shot GCP browser actions: probe, dismiss, list, create, enable, etc.
+  - `drive-smoke.mts` — Drive SA smoke test (now exercises full create+delete with `supportsAllDrives:true`)
+  - `drive-create-shared-drive.mts` / `drive-add-sa-member.mts` / `drive-finish-add-sa.mts` — UI-driven Shared Drive setup attempts (kept for reference; the working path is OAuth)
+  - `drive-oauth-add-sa.mts` — one-shot OAuth loopback flow that adds the SA to the Shared Drive via REST. Reusable for any other admin-task that needs user-OAuth (just swap the API call).
+  - `drive-create-folders-in-sd.mts` — idempotent: ensures `CRM Templates` + `CRM Generated` exist inside the Shared Drive, prints folder IDs.
+  - `drive-wait-signin.mts` / `drive-wait-cloud-console.mts` / `cdp-probe.mts` / `drive-snap.mts` — small CDP utilities for orchestrating headed-browser flows.
+  - `gcp-add-redirect-uri-do.mts` / `gcp-add-redirect-v2.mts` / `gcp-verify-redirect.mts` — Cloud Console redirect-URI management (used to register `http://localhost:53682/oauth/callback`).
+- `.playwright-profile/` — persistent Chrome profile (gitignored)
+- `.playwright-shots/` — debugging screenshots from automation runs (gitignored)
+- `.secrets/service-account.json` — Drive service account JSON key (gitignored)
+- `.env.local` — Supabase URL+anon, Postgres DATABASE_URL, Dialpad admin key + Rayan filter, Google OAuth client id+secret + service account JSON + folder IDs + project id (gitignored)
+- `test.md` — empty file user opened in IDE; ignore
 - Outside project root:
-  - `C:\Users\msefa\.claude\plans\i-d-like-you-to-serene-emerson.md` — Claude Code plan-mode plan file (was active during brainstorm; now obsolete after exiting plan mode)
+  - `C:\Users\msefa\.claude\plans\i-d-like-you-to-serene-emerson.md` — Claude Code plan-mode plan file (was active during brainstorm; now obsolete)
+- **GCP project under SchoolConex Workspace:** `schoolconex-crm` (project number `489266381443`, owner matthew@schoolconex.com)
+- **Supabase project:** `ooanslwrwjexdjwdphes`
 
 ---
 
@@ -184,6 +288,67 @@ The persistent-notes system is live in single-file mode. The skill auto-runs aft
 - `npm run build` passes (Turbopack, 6s compile, 3 static routes)
 - Initial commit: `a47f81a` "Phase 1 step 1: scaffold Next.js 15 + Tailwind v4 + Supabase + Drizzle" (commit message says 15 — actual installed version is 16; minor cosmetic discrepancy, not worth amending)
 
+### Session 2026-05-06 — Dialpad activation + demo user + e2e tests (Claude, ~1 hour)
+- Dialpad token-tier exploration: original token (JWT, scope `calls:list`, tier 0) returned 401 on `/api/v2/call`. User then provided a company-admin API key which works.
+- Resolved Rayan's Dialpad user: `id=6598548464648192`, `phone=+14375234132`, `emails=[rayan@schoolconex.com]`. Pinned via `DIALPAD_FILTER_USER_ID` in `.env.local`.
+- Built `lib/integrations/dialpad-client.ts` (typed wrappers: `getUser`, `listCalls`, `iterateCalls` with cursor pagination, `durationSeconds` ms→s helper, `getRecordingUrl` for `recording_details[].url` shape).
+- Built `inngest/functions/dialpad-sync-rayan.ts` — `*/10 min` cron, watermarked via max(`received_at`), idempotent on `(provider, event_id)`.
+- Built `scripts/dialpad-backfill.mts` — manual N-day backfill that goes straight to Postgres (parent activity + calls child + raw event, no Inngest needed). `npm run dialpad:backfill -- 30` ingested 96 calls for Rayan (72 inbound / 24 outbound). 0 matched contacts (demo data has fake phones).
+- Internal-call tagging: 24 of 96 calls were Rayan ↔ another @schoolconex.com employee (Matthew); summary now suffix `· internal` and contact-match is skipped (D-020).
+- Demo sign-in: `scripts/create-demo-user.sql` + `scripts/run-demo-user.mts` create `demo@schoolconex.com / Test1234!` via direct insert into `auth.users` + `auth.identities`. Trigger creates `public.users` row with role `admin` (first user).
+- Email/password fallback added to `/login` (D-022). `signInWithEmailPassword` Server Action validates @schoolconex.com domain.
+- E2E test rig: `scripts/e2e-rayan.mts` + `scripts/e2e-inbox-check.mts`. Sign-in via Supabase REST → forge `sb-{ref}-auth-token` cookie → walk 13 protected routes → 11/13 success (the 2 "failures" are correct redirects). Inbox check verified all 96 calls render with correct durations (4:14, 31:36, etc.) and internal tag.
+
+### Session 2026-05-06 — Google Drive provisioning via browser automation (Claude, ~2 hours)
+- Installed Playwright + headed Chrome over CDP (D-023). Wrote `scripts/browser-launch.mts` (long-running profile-persistent Chrome) + a dozen one-shot `scripts/gcp-*.mts` action scripts.
+- **F-004**: First setup pass was done in `matthewsefati@gmail.com` personal account / project `gmail-mcp-personal`. User course-corrected. Discarded all that work.
+- Switched to `matthew@schoolconex.com`. Listed projects under schoolconex.com org (6 found, none CRM-related).
+- Created NEW project `schoolconex-crm` (project number 489266381443) under schoolconex.com org.
+- Enabled `drive.googleapis.com` and `docs.googleapis.com` (via in-page DOM-eval click since Playwright role-locators kept missing the Enable button).
+- Configured OAuth consent screen as **Internal** user type — wrestled with Material chip-input + radio bindings; final solve = `radio.check({force: true})` + `input.fill()` via resolved id (D-023, D-025).
+- Created Web OAuth client; captured the new secret by reading `aria-label="Copy to clipboard: GOCSPX-..."` on the copy button (the modal doesn't display the unmasked secret in text).
+- Created service account `schoolconex-crm-drive@schoolconex-crm.iam.gserviceaccount.com`. Downloaded JSON key (proper Playwright `page.waitForEvent('download')` set up BEFORE the click). Saved to `.secrets/service-account.json` + single-line copy in `GOOGLE_SERVICE_ACCOUNT_KEY`.
+- Created Drive folders programmatically via Drive API (using the just-captured SA): `CRM Templates` (`1i0H2W1FZAvaxaOq0BXWGGQryRGpgCakZ`) + `CRM Generated` (`1ZkPo1ApnIBqZhZzwm9LkEaMNG3aeHaaz`). Both shared with matthew@schoolconex.com as writer.
+- Drive smoke test: SA auth verified, both folders readable. Doc creation FAILED with `storageQuotaExceeded` (F-005). Smoke test rewritten to verify auth+read only.
+- All Google credentials in `.env.local` populated: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_SERVICE_ACCOUNT_KEY`, `GOOGLE_DRIVE_TEMPLATES_FOLDER_ID`, `GOOGLE_DRIVE_GENERATED_FOLDER_ID`, `GOOGLE_CLOUD_PROJECT_ID=schoolconex-crm`.
+
+### Session 2026-05-07 — F-005 fix via Shared Drive (Claude, ~1.5 hours)
+- User picked Option A (Shared Drive) and asked Claude to drive the browser autonomously.
+- Re-launched headed Chrome (`scripts/browser-launch.mts`) pointed at `drive.google.com/drive/shared-drives`. User signed in as `matthew@schoolconex.com`.
+- **Created Shared Drive** "SchoolConex CRM" (id `0AFnM-2HvmqO2Uk9PVA`) via Drive web UI (`scripts/drive-create-shared-drive.mts`). Required two iterations to find the right click target — Drive renders the "+ New" pill twice, only the second is visible (the first is `display:none` with `guidedhelpid="new_menu_button"` in a hidden rail variant). Final selector: pick the smallest visible element with text "New", click via `mouse.click()` at center coords. The "New shared drive" dialog has a unique title that disambiguates from Drive's many other `[role=dialog]` wrappers including the always-rendered hidden "Showing viewer" dialog.
+- **Adding the SA via Drive UI was a dead end** — the "Manage members" link's text element has no clickable ancestor in 6 levels (Drive uses delegated event handling that we couldn't reliably reproduce via CDP). Pivoted to Drive REST API.
+- **OAuth loopback flow** (`scripts/drive-oauth-add-sa.mts`): listen on `127.0.0.1:53682`, open the consent URL in the same Chrome session, exchange the code for a Drive-scoped access token, call `permissions.create` with `supportsAllDrives:true`, role=`organizer`. Required adding the redirect URI to the OAuth client first.
+- **Adding the redirect URI** (`scripts/gcp-add-redirect-v2.mts`): user's password challenge cleared via the same Chrome (Cloud Console required re-auth even though Drive was logged in). Then drove the OAuth client edit page to click "+ Add URI", typed `http://localhost:53682/oauth/callback`, clicked Save. First Save click missed (clicked at y=891 instead of the actual Save button at y=837 — the page shifts when URIs are added). Second attempt with Playwright's `locator.click()` + `scrollIntoViewIfNeeded` worked. The OAuth client now has TWO redirect URIs: localhost:3000/auth/google-drive-callback (pre-existing for app-level Drive OAuth) and localhost:53682/oauth/callback (new, for admin tasks).
+- **OAuth flow itself ran clean** once the URI was registered: user picked matthew@schoolconex.com on the consent screen, approved the Drive scope, redirect fired into the loopback server, `permissions.create` returned a 200 with `kind: "drive#permission"`, member list confirmed both matthew@schoolconex.com and the SA as `organizer`.
+- **Created folders inside the Shared Drive** (`scripts/drive-create-folders-in-sd.mts`): SA used `files.create` with `parents:[SHARED_DRIVE_ID]` and `supportsAllDrives:true`. New IDs `CRM Templates` `1T7ItO_S8O4sGsnftj3kWz04L1R0fJQPo` and `CRM Generated` `1NR8wyn013tPE2NLWl4ke5OSc4UDJiXZj`.
+- **Updated `.env.local`** with `GOOGLE_DRIVE_SHARED_DRIVE_ID` and the new folder IDs; legacy My-Drive folder IDs kept as `*_LEGACY` comments for reference.
+- **Updated `scripts/drive-smoke.mts`** to test a full create-Doc + delete cycle (was previously read-only). Smoke test passes: SA creates a Google Doc inside `CRM Generated`, the response shows `driveId === GOOGLE_DRIVE_SHARED_DRIVE_ID`, then deletes the Doc cleanly. F-005 confirmed resolved.
+
+### Session 2026-05-07 — Validation + Rayan email probe (Codex, ~45 minutes)
+- Re-ran `scripts/drive-smoke.mts`; it passed full Shared Drive create/delete with `driveId=0AFnM-2HvmqO2Uk9PVA`.
+- Confirmed `scripts/dialpad-lookup-user.mts rayan@schoolconex.com` resolves Rayan as `id=6598548464648192`, email `rayan@schoolconex.com`, phone `+14375234132`.
+- Updated `scripts/dialpad-list-calls.mts` to print target/contact email fields; `scripts/dialpad-list-calls.mts 3` pulled 3 records via Rayan's `user_id`, with outbound samples showing `target_email:"rayan@schoolconex.com"`.
+- Updated smoke expectations in `scripts/e2e-inbox-check.mts` and `scripts/e2e-rayan.mts`; `/inbox` validation passes and the route walk is now 13/13.
+- Probed Gmail mailbox access for `rayan@schoolconex.com` through the service account with `gmail.readonly`; Google returned `401 unauthorized_client`. Logged F-006 because Gmail mailbox ingestion is blocked until Workspace DWD or per-user Gmail OAuth is authorized.
+
+### Session 2026-05-09 — Mailshake activation + UI (Claude, ~3 hours)
+- Added `MAILSHAKE_API_KEY` to `.env.local`. Smoke (`npm run mailshake:list-campaigns`) returned 29 campaigns. Probed individual endpoints to map Mailshake's actual API surface (F-009): only `/campaigns/list`, `/recipients/list`, `/leads/list` are usable for polling.
+- Added `mailshake_campaigns` + `mailshake_leads` tables to `lib/db/schema.ts`. Pushed via `npm run db:push` (force). Recreated RLS policies via `npm run db:apply-migrations`. Added `supabase/migrations/0004_mailshake_campaigns_rls.sql` (read by all authenticated, write by admin/service role only).
+- Built `lib/integrations/mailshake.ts` (Mailshake client: `listCampaigns`, `listLeads`, `paginate` with cycle-token guard + maxPages=100). Built `lib/integrations/mailshake-sync.ts` (`syncAllCampaigns`, `syncCampaign`, `rematchAllLeads`, `matchLead` — email→contact, then school name→account). Built Inngest cron `mailshake-sync-campaigns` (every 30 min, registered in `inngest/functions/index.ts`).
+- Manual scripts: `mailshake:sync`, `mailshake:import-accounts` (with `--dry`), `mailshake:stats`. All use `tsx --conditions=react-server` so `server-only` resolves to its no-op stub via the package's exports map.
+- Auto-import 274 schools from Mailshake recipient.fields.account → `accounts` (source='mailshake'). Re-matched: 301/305 leads now linked to CRM accounts (98.7%). The 4 unmatched leads have no `fields.account` populated upstream.
+- UI: `/campaigns` (list with engaged/open/closed/ignored columns + Top schools table + amber webhook-not-set banner), `/campaigns/[id]` (campaign detail with stats row + per-school grouping with status badges, every school links to its account), Campaigns tab on account detail (lists every campaign that touched the account with recipients + status), Mailshake card on `/settings/integrations` (campaigns synced, leads tracked, last sync, webhook secret status). Sidebar entry "Campaigns" added between Opportunities and Dashboard.
+- After first round of UI testing, discovered my labels were wrong — Mailshake's lead status is `open|closed|ignored` (lead pipeline), not the email-event categories I'd assumed (opens/clicks/replies/bounces). Re-labeled across `lib/crm/mailshake.ts`, `/campaigns`, `/campaigns/[id]`, and account Campaigns tab. Added explanatory copy + a banner on `/campaigns` explaining the webhook activation path.
+- Validated end-to-end via Playwright (`scripts/mailshake-e2e-validate.mts`): login as `demo@schoolconex.com` → `/accounts` redirect → `/campaigns` (43 rows = 29 campaigns + 14 top schools) → click into top campaign → 107 schools touched grouped + linked to accounts → navigate to top account (Disha Consultants) → Campaigns tab shows Gujarat-Forth-Batch-A with 3 recipients. Screenshots in `.playwright-shots/ms-*.png`.
+
+### Session 2026-05-08 — Full verification sweep (Codex, ~1.5 hours)
+- Ran static verification: `npm run typecheck` passed, `npm run build` passed and generated all 24 static pages plus dynamic app/API routes.
+- Ran authenticated route smoke: `scripts/e2e-rayan.mts` passed 13/13, `/inbox` smoke passed, and a dynamic-route probe passed 10/10 account/contact/opportunity/catalog create/edit/detail URLs with real DB IDs.
+- Ran live integrations: Drive Shared Drive smoke passed create/delete with `driveId=0AFnM-2HvmqO2Uk9PVA`; Dialpad lookup/list passed for Rayan; DB counts show 96 call activities (72 inbound / 24 outbound).
+- Found and fixed F-007: middleware auth blocked unauthenticated webhook/Inngest callbacks. Added `/api/webhooks` + `/api/inngest` to public paths; webhook no-op POSTs now reach their route handlers.
+- Found and fixed F-008: `/api/inngest` returned 500 without local Inngest dev mode. Added `server-only`, documented/set `INNGEST_DEV=1`, and verified a production-server smoke returns Inngest metadata (`function_count:6`, `mode:"dev"`).
+- Confirmed remaining known blockers: Gmail mailbox pull still returns `401 unauthorized_client`; catalog/products/packages/templates tables are empty; `npm run lint`, direct `eslint .`, and `npm run format:check` are not green; `npm audit` reports 7 moderate advisories.
+
 ---
 
 ## Failures & Resolutions
@@ -206,47 +371,124 @@ The persistent-notes system is live in single-file mode. The skill auto-runs aft
 **Fix:** Renamed `middleware.ts` → `proxy.ts`, exported function `proxy` instead of `middleware`. Added explicit `CookieToSet[]` type to both `lib/supabase/server.ts` and `lib/supabase/middleware.ts` to satisfy strict TS. Also moved `experimental.typedRoutes` to top-level `typedRoutes` in `next.config.ts`.
 **Guardrail:** When upgrading Next majors, scan the build output for deprecation warnings before assuming a green build means we're on supported APIs.
 
+### F-004 — Initial GCP work was done in the wrong Google account — 2026-05-06
+**Issue:** The first Drive integration setup (Web OAuth client, test users, exploration) was done while the headed Chrome was logged into `matthewsefati@gmail.com` (personal) under project `gmail-mcp-personal-495520`. User course-corrected mid-session: "I want connected is the SchoolConex drive, which is matthew@schoolconex.com".
+**Root cause:** Browser-launch script just opened the GCP console without specifying which Google account to use; the user had been logged into their personal Gmail in this Chrome profile. I should have asked which account up front.
+**Fix:** Discarded everything in `gmail-mcp-personal`. Cleared `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` from `.env.local`. Re-did all setup under `matthew@schoolconex.com` in a brand-new project `schoolconex-crm` under the schoolconex.com org.
+**Guardrail:** Before any GCP / Workspace setup, run `gcp-probe.mts status` and confirm `signed-in account` matches expectations. If switching accounts in Chrome, restart `browser-launch.mts` so the persistent profile picks up the right session.
+
+### F-005 — Service account has 0 Drive storage quota → Doc creation fails — 2026-05-06 (RESOLVED 2026-05-07)
+**Issue:** Drive smoke test failed at `drive.files.create({ mimeType: 'application/vnd.google-apps.document' })` with HTTP 403 `"The user's Drive storage quota has been exceeded"`. Folder creation succeeded (folders don't consume storage); Doc creation didn't.
+**Root cause:** Google service accounts have no consumer-grade Drive storage by default. They can read/write files in folders shared with them, and create folders in their own My Drive (free), but Docs/Sheets/Slides created in My Drive count against quota — which is 0 for SAs.
+**Resolution:** Took **Option A (Shared Drive)** — see D-027 for full mechanics. Smoke test now passes the full create/delete cycle, with the test file's `driveId` matching the Shared Drive id (so storage is owned by the Drive, not the SA).
+**Why we picked A over B:** Shared Drive is one-time setup; Domain-Wide Delegation requires ongoing admin.google.com config and ties contract ownership to a specific human user (impersonation footgun on SA rotation).
+**Guardrail:** When the integration design says "service account writes files", default to Shared Drive from day one. Don't try to use SA's My Drive — it's not for that. Always pass `supportsAllDrives: true` on any Drive API call that touches Shared Drive content.
+
+### F-006 — Gmail mailbox pull for Rayan is blocked by missing Gmail authorization — 2026-05-07
+**Issue:** User asked to make sure email pull also covers `rayan@schoolconex.com`. Dialpad payloads do expose `target.email` for Rayan, but actual Gmail mailbox access is not live.
+**Evidence:** Service-account impersonation probe using `subject:"rayan@schoolconex.com"` and scope `https://www.googleapis.com/auth/gmail.readonly` returned HTTP 401 `unauthorized_client: Client is unauthorized to retrieve access tokens using this method, or client not authorized for any of the scopes requested.`
+**Root cause:** Existing Google setup is Drive/Docs only. The service account is not authorized for Gmail domain-wide delegation, and the app's OAuth flow only asks for Drive scopes (`drive.file`, `userinfo.email`), not Gmail scopes.
+**Fix options:** A) Enable Domain-Wide Delegation for the service account, authorize the service account OAuth client ID in Google Workspace Admin with Gmail readonly scope, then implement a cron Gmail sync for Rayan. B) Add a per-user Gmail OAuth connect flow and have Rayan consent directly. A is better for admin-managed CRM ingestion; B is better for least-privilege rep-controlled access.
+**Guardrail:** Do not claim Gmail mailbox sync works until `gmail.users.getProfile({ userId:"me" })` returns `rayan@schoolconex.com` and `gmail.users.messages.list` returns or legitimately reports zero messages for the expected query window.
+
+### F-007 — External webhook/Inngest routes were blocked by app auth — 2026-05-08 (RESOLVED 2026-05-08)
+**Issue:** Full verification POSTed no-op payloads to `/api/webhooks/*` and got the login HTML instead of route-handler responses. Third-party integrations would not be able to deliver events because they do not have Supabase session cookies.
+**Root cause:** `lib/supabase/middleware.ts` only treated `/login`, `/auth/*`, `_next`, favicon, and `/api/health` as public. `proxy.ts` matched API routes too, so unauthenticated webhook/Inngest requests redirected to `/login`.
+**Fix:** Added `/api/webhooks` and `/api/inngest` to `PUBLIC_PATHS`. Re-ran no-op webhook smoke: Dialpad and Mailshake return 400 invalid JSON, Stripe returns 400 missing secret/signature, WhatsApp returns 200 unrecognized event; all now reach their route handlers.
+**Guardrail:** Any callback endpoint meant for external systems must be public at middleware level and enforce authenticity inside its own route handler.
+
+### F-009 — Mailshake REST API has no per-event endpoints — 2026-05-09 (DOCUMENTED)
+**Issue:** Tried polling `/sentEmails/list`, `/opens/list`, `/clicks/list`, `/replies/list`, `/messages/list`, `/campaigns/getStats`, `/recipients/getActivities` to track email events per campaign — all returned 404 from `https://api.mailshake.com/2017-04-01`.
+**Root cause:** Mailshake's public REST API surfaces only campaigns / recipients / leads (lead pipeline) / deliverability reports. Real-time event tracking (sent / opened / clicked / replied / bounced) is delivered via webhooks only.
+**Workaround:** Use the lead-pipeline `status` field from `/leads/list` as a proxy for "engaged recipient" — it captures recipients who triggered any tracked event. For full per-event timelines, register the webhook URL `https://<deployed-host>/api/webhooks/mailshake` in Mailshake → Account → Webhooks (handler already wired at `app/api/webhooks/mailshake/route.ts` → Inngest `mailshake-process-event` → `email_events` + activity timeline).
+**Guardrail:** Any future ask for "track opens / clicks / replies per X" against Mailshake must include webhook activation as a prerequisite — REST polling alone cannot satisfy it.
+
+### F-008 — `/api/inngest` returned 500 in local/prod smoke — 2026-05-08 (RESOLVED 2026-05-08)
+**Issue:** After F-007, `GET /api/inngest` returned 500 `internal_server_error`.
+**Root cause:** Two local-runtime pieces were missing: the `server-only` package used by the Drive integration import chain, and Inngest local dev mode. In production mode without `INNGEST_SIGNING_KEY`, Inngest requires `INNGEST_DEV=1` for local verification.
+**Fix:** Installed `server-only`, set `INNGEST_DEV=1` in `.env.local`, documented it in `.env.example`, and verified `next start -p 3002` returns `GET /api/inngest` metadata with `function_count:6`, `mode:"dev"`.
+**Guardrail:** Production deploys must set `INNGEST_SIGNING_KEY` and leave `INNGEST_DEV` unset; local verification can use `INNGEST_DEV=1`.
+
+### F-010 — Mailshake manual sync CLI completed but did not exit — 2026-05-09 (RESOLVED 2026-05-09)
+**Issue:** `npm run mailshake:sync` reached the expected final summary (`campaigns upserted: 29`, `leads upserted: 305`, `matched account: 301`) but the process stayed alive until the verification timeout killed it.
+**Root cause:** `scripts/mailshake-sync.mts` and `scripts/mailshake-import-accounts.mts` imported the shared Drizzle/Postgres singleton from `lib/db` without closing its underlying `postgres` client in script mode.
+**Fix:** Exported `closeDb()` from `lib/db/index.ts` and wrapped both Mailshake CLI entrypoints in `finally { await closeDb(); }`. The Inngest cron path still uses the shared app client and does not close it per invocation.
+**Guardrail:** Any future one-shot script that imports `lib/db` must close the shared client before process exit.
+
+### F-011 — Mailshake UI default/counts did not fully reflect live snapshot — 2026-05-09 (RESOLVED 2026-05-09)
+**Issue:** `/campaigns` defaulted to 28 non-archived campaigns instead of all 29 synced campaigns, and `/settings/integrations` showed campaigns/leads but not the 301/305 account-match count.
+**Fix:** Made `/campaigns` default to all campaigns with an active-only toggle, and added `Matched to accounts 301/305` to the Mailshake integration card.
+
 ---
 
 ## Open Questions / Next Steps
 
-### To unblock first sign-in (TODAY)
+### Drive integration — followups now that F-005 is RESOLVED
 
-1. **Configure Google OAuth in Supabase dashboard.** Without this, the login button will fail. Steps:
-   1. Supabase dashboard → Authentication → Providers → Google → enable.
-   2. Create a Google Cloud OAuth client (type: Web app). Authorized redirect URI: `https://ooanslwrwjexdjwdphes.supabase.co/auth/v1/callback`.
-   3. Paste Google client ID + secret into Supabase → save.
-   4. In Authentication → URL Configuration, add `http://localhost:3000` to redirect allow-list.
-2. **Enable email-domain restriction in Supabase Auth (defense in depth).** Authentication → Providers → Google → "Skip nonce check": leave default; the DB trigger is the hard guarantee.
-3. **First sign-in becomes admin** automatically (handle_new_auth_user trigger). Subsequent users default to `rep`; promote in `/settings/users`.
+1. ✅ ~~Resolve F-005~~ — done via D-027 (Option A, Shared Drive). Smoke test passes full create/delete.
+2. **Add at least one real contract template** to `CRM Templates` folder (`1T7ItO_S8O4sGsnftj3kWz04L1R0fJQPo`) + register it in the CRM via `/settings/templates`. Use placeholders `{{account_name}}`, `{{opportunity_name}}`, `{{contract_value}}`, `{{rep_name}}`, `{{rep_email}}`, `{{today}}`.
+3. **Wire `lib/integrations/google/drive.ts` (or wherever the contract-generation flow lives) to use the new env vars + always pass `supportsAllDrives: true`.** End-to-end test: trigger "Generate contract" on an opportunity → confirm the new Doc lands in `CRM Generated` (Shared Drive), is owned by the Shared Drive, and is shared with the rep as `writer` so it appears in their "Shared with me".
 
-### Phase 1 follow-ups (nice-to-have, not blockers)
+### Dialpad — followups (low priority)
 
-4. **Service-role key** — `.env.local` has `SUPABASE_SERVICE_ROLE_KEY` empty. Needed for any future admin flow that bypasses RLS (none in Phase 1).
-5. **Pipelines admin editor** — `/settings/pipelines` is read-only; CRUD UI deferred. Use SQL or db:seed for changes meanwhile.
-6. **Global search** — `⌘K` palette stub exists but doesn't run queries. Wire to a search RPC in a follow-up.
-7. **`audit_log` viewer** — table populated by triggers; no UI yet.
+4. **Re-match unmatched calls** when contacts are added: 96 calls currently in `/inbox` because contacts table doesn't have the real phone numbers yet. Either:
+   - Import Dialpad contacts as CRM contacts (by phone) via a one-off script, OR
+   - Manually create accounts/contacts for the schools, then run a "rerun-matching" Inngest job (write needed).
+5. **Surface phone number on `/inbox` rows.** Started — `/inbox` page copy was updated but the activity-timeline component doesn't pull/show `calls.from_number` / `calls.to_number`. Fix: extend timeline query to JOIN child `calls` row when `channel='call'`, render number in summary line.
+6. **Transcripts:** Dialpad's call payloads include `transcription_text` only when the workspace has transcription enabled. Looking at Rayan's calls so far, none had transcript text. Verify whether the SchoolConex Dialpad plan supports it.
 
-### Next phase planning
+### Sign-in / auth
 
-8. **WhatsApp Business API decision (D-012)** — needed before Phase 6 build.
-9. **Phase 2 kickoff (Google Drive)** — gated on Phase 1 stability (D-013 = "two reps using daily for a full week without blocker bugs"). Not started.
-10. **DocuSign / e-signature volume** — confirm urgency (v3 candidate).
-11. **Reporting / dashboard requirements** — define before Phase 5.
-12. **Compliance confirmation** — CRM does not ingest student records (FERPA out of scope). Confirm in writing.
+7. **Supabase Google OAuth** — still not configured in Supabase dashboard. Workaround: email/password form on `/login` (D-022). Long-term, configure Google provider in Supabase + use the new schoolconex-crm Web OAuth client (`489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n...`) for SSO. Redirect URI in Google: `https://ooanslwrwjexdjwdphes.supabase.co/auth/v1/callback`.
+8. **Service-role key** — `.env.local` has `SUPABASE_SERVICE_ROLE_KEY` empty. Needed for any future admin flow that bypasses RLS.
+
+### Phase 1 follow-ups
+
+9. **Pipelines admin editor** — `/settings/pipelines` is read-only; CRUD UI deferred.
+10. **Global search** — `⌘K` palette stub exists but doesn't run queries.
+11. **Re-match Inngest job** — see #4 above.
+
+### Mailshake — followups
+
+22. **Register webhook URL in Mailshake** to capture real-time per-email events + reply text. URL: `https://<deployed-host>/api/webhooks/mailshake`. Events: `sent`, `open`, `click`, `reply`, `bounce`. Set `MAILSHAKE_WEBHOOK_SECRET` once registered. Without this, the lead-pipeline counts (`open`/`closed`/`ignored`) are the only data we have — see F-009 for full context.
+23. **Add reply text on account timeline.** Once webhooks are flowing, replies will populate `email_events` rows linked to activities; the existing `ActivityTimeline` component renders email_events generically. Verify rendering shows subject + snippet for `mailshake_event` channel and add a "View on Mailshake" link.
+24. **Surface Mailshake lead status changes as activity rows.** Today the cron only upserts `mailshake_leads`; transitions (open → closed) aren't a timeline event. Consider emitting a `mailshake_event` activity on status change so each "lead converted to closed" shows up in the account history.
+25. **Consider auto-import for new schools on every sync run.** Currently `mailshake:import-accounts` is manual. Could be a step inside the cron that runs after `syncAllCampaigns()`.
+
+### Phase 5/6 planning
+
+12. **Gmail sync for Rayan (NEW REQUEST, BLOCKED by F-006).** Recommended path: Domain-Wide Delegation against the SA, poll every 10 min, ingest only threads where at least one external recipient/sender matches a known CRM contact email. Read-only; body+snippet only, no attachments; matches via shared `contact-matcher.matchEmailToContact()`. First unblock authorization: either Workspace DWD for `gmail.readonly` on the service account or per-user Gmail OAuth consent by Rayan.
+13. **Stripe** — needs `STRIPE_SECRET_KEY` + webhook secret.
+14. **Mailshake** — needs `MAILSHAKE_API_KEY` + webhook secret.
+15. **WhatsApp Business API decision (D-012)** — needed before Phase 6 activation.
+16. **DocuSign / e-signature volume** — v3 candidate.
+17. **Reporting / dashboard requirements** — define before Phase 5.
+18. **Compliance confirmation** — CRM does not ingest student records (FERPA out of scope).
+
+### Verification / hygiene follow-ups
+
+19. **Lint config/script is broken.** `npm run lint` calls `next lint`, which Next 16 treats as an invalid project directory. Direct `npx eslint .` also fails with an ESLint 9 circular config error. Fix ESLint config/script before treating lint as a release gate.
+20. **Formatting is not clean.** `npm run format:check` reports 137 files with Prettier style issues. This is repo-wide existing churn; run a dedicated formatting pass when ready.
+21. **Audit has moderate advisories.** `npm audit --audit-level=high` reports no high/critical blocker but does list 7 moderate advisories (esbuild via drizzle-kit, postcss via next/inngest). `npm audit fix --force` proposes breaking downgrades/upgrades, so handle deliberately.
 
 ---
 
 ## Context for the Next Agent
 
-- **No code exists.** The next session likely scaffolds the Next.js 15 App Router project, sets up Supabase, applies schema migrations, and begins Phase 1.
-- **User context:** SchoolConex is an education + tech company. User email: `ai@schoolconex.com`. Targets: schools and aspiring school founders. Services: Principal Service, LMS, 70+ courses with packaged pricing.
-- **Stack pinning:** Next.js 15 (App Router only — do NOT use Pages Router), Tailwind v4, shadcn/ui (CLI-installed components), Drizzle ORM preferred for type-safe schema (final decision at scaffold time), Inngest SDK for jobs.
-- **Drive integration:** uses `drive.file` scope (NOT `drive.readonly` or full Drive). Service account credentials TBD.
-- **Dialpad integration:** API key in env, webhook signature verification mandatory before any DB writes.
-- **RLS first:** every new table MUST have RLS policies before any rows are inserted. Do not skip for "we'll add policies later."
+- **Codebase exists.** ~25 routes, full data model, Phase 1 (UI), the Dialpad poll-sync, and the Drive integration are all LIVE. Other integrations (Stripe / Mailshake / WhatsApp) are code-complete and inert pending creds.
+- **User context:** SchoolConex is an education + tech company on Google Workspace `schoolconex.com`. Primary contact: matthew@schoolconex.com. Sales rep being tested: rayan@schoolconex.com (his Dialpad number `+1 437 523 4132`).
+- **GCP project for Drive integration:** `schoolconex-crm` under schoolconex.com Workspace (NOT matthewsefati@gmail.com personal — see F-004 for the wrong-account incident).
+- **Local sign-in test creds:** `demo@schoolconex.com / Test1234!` (admin role). Email/password form added to `/login` alongside Google SSO. See D-021/D-022.
+- **Dialpad token:** Must be a **company-admin** API key (not user-tier JWT). Personal-tier tokens 401 on `/api/v2/call`. Filter to a single user via `DIALPAD_FILTER_USER_ID` env var.
+- **Dialpad payload quirks:** `duration` is in milliseconds; convert via `Math.round(c.duration / 1000)` before storing in `calls.duration_seconds` (smallint). Recording is at `recording_details[0].url`, not `recording_url[0]`. Page size capped at 50.
+- **Drive integration:** LIVE (F-005 resolved via D-027). Shared Drive `0AFnM-2HvmqO2Uk9PVA` ("SchoolConex CRM") hosts both folders. SA `schoolconex-crm-drive@schoolconex-crm.iam.gserviceaccount.com` is `organizer` on the Shared Drive. **All Drive API calls touching CRM content MUST pass `supportsAllDrives: true`** (and for `files.list`, also `includeItemsFromAllDrives:true`, `corpora:"drive"`, `driveId: env.GOOGLE_DRIVE_SHARED_DRIVE_ID`). See `scripts/drive-smoke.mts` for the canonical pattern.
+- **External callbacks:** `/api/webhooks/*` and `/api/inngest` are public at middleware level (D-029) and must validate inside route handlers. Local Inngest verification uses `INNGEST_DEV=1`; production uses real Inngest keys (D-030).
+- **Gmail mailbox access:** NOT live. Service-account impersonation for `rayan@schoolconex.com` + `gmail.readonly` returns `401 unauthorized_client`; see F-006. This is separate from Dialpad, whose API already returns Rayan's `target.email` in call payloads.
+- **Browser automation framework:** `scripts/browser-launch.mts` opens long-running Chrome on port 9222; `scripts/gcp-*.mts` connect via CDP. Caveats in D-023 — Material radios need `radio.check({force:true})`, downloads need `page.waitForEvent('download')` set up BEFORE the click, and selectors that match `[role="combobox"]` will collide with GCP's global search bar; scope to form region.
+- **Stack pinning:** Next.js 16 (App Router only — do NOT use Pages Router), Tailwind v4, shadcn/ui, Drizzle ORM 0.45, Inngest SDK, googleapis, stripe, playwright (dev only).
+- **RLS first:** every new table MUST have RLS policies before any rows are inserted.
 - **The spec is the source of truth** for design decisions. If a decision needs to change, log it as a new D-NNN entry, don't rewrite history.
 - **`integration_events_raw`** is sacred: never drop rows, never edit historical payloads. It exists for replay.
-- **Activity timeline insertion** must go through a `recordActivity()` helper (TBD at implementation time) — direct INSERT into child tables without the parent `activities` row will desync the timeline.
-- **Plan mode + auto mode were both used** during this session. After plan-mode exit, user re-enabled auto mode; treat continuous execution as the default for the remainder.
-- **Keep updates terse.** Notes get longer fast. Prefer linking to D-NNN entries over re-stating the decision.
+- **Activity timeline insertion** must go through `lib/integrations/record-activity.ts` `recordActivity()` for integration code (bypasses RLS via Drizzle/postgres role). UI Server Actions still use the Supabase server client (RLS-enforced). See D-018.
+- **Auto mode default.** Treat continuous execution as the default; user will course-correct if needed.
+- **Keep updates terse.** Notes get longer fast. Prefer linking to D-NNN / F-NNN entries over re-stating.

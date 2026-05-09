@@ -18,6 +18,24 @@ export default async function IntegrationsPage(props: {
 
   const drive = (rows ?? []).find((r) => r.provider === "google_drive");
 
+  const { count: mailshakeCampaigns } = await sb
+    .from("mailshake_campaigns")
+    .select("id", { count: "exact", head: true });
+  const { count: mailshakeLeads } = await sb
+    .from("mailshake_leads")
+    .select("id", { count: "exact", head: true });
+  const { count: mailshakeMatchedLeads } = await sb
+    .from("mailshake_leads")
+    .select("id", { count: "exact", head: true })
+    .not("account_id", "is", null);
+  const { data: lastMailshakeSync } = await sb
+    .from("mailshake_campaigns")
+    .select("last_synced_at")
+    .order("last_synced_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const mailshakeReady = Boolean(process.env.MAILSHAKE_API_KEY);
+
   return (
     <div className="px-6 py-5">
       <div className="mb-4">
@@ -43,6 +61,67 @@ export default async function IntegrationsPage(props: {
       )}
 
       <div className="grid gap-3 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Mailshake</CardTitle>
+              {mailshakeReady ? (
+                <Badge variant="default">Live</Badge>
+              ) : (
+                <Badge variant="secondary">Inactive</Badge>
+              )}
+            </div>
+            <CardDescription className="text-xs">
+              Account-level API key syncs all campaigns + per-lead status every 30 min.
+              Recipients are matched to CRM accounts by email or by Mailshake&apos;s
+              <code className="mx-1">account</code>field.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Campaigns synced</span>
+              <span className="tabular-nums">{mailshakeCampaigns ?? 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Leads tracked</span>
+              <span className="tabular-nums">{mailshakeLeads ?? 0}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Matched to accounts</span>
+              <span className="tabular-nums">
+                {mailshakeMatchedLeads ?? 0}/{mailshakeLeads ?? 0}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Last sync</span>
+              <span>
+                {lastMailshakeSync?.last_synced_at
+                  ? new Date(lastMailshakeSync.last_synced_at).toLocaleString()
+                  : "—"}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Webhook secret</span>
+              <span>
+                {process.env.MAILSHAKE_WEBHOOK_SECRET ? (
+                  <Badge variant="default" className="text-[10px]">
+                    set
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-[10px]">
+                    not set (unsigned events accepted)
+                  </Badge>
+                )}
+              </span>
+            </div>
+            <div className="pt-1">
+              <a href="/campaigns" className="text-xs underline">
+                View campaigns →
+              </a>
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

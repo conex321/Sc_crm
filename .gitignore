@@ -52,6 +52,11 @@ yarn-error.log*
 # OS
 test.md
 
+# Browser automation artifacts (screenshots + downloaded credentials)
+.playwright-profile/
+.playwright-shots/
+.secrets/
+
 # vercel
 .vercel
 

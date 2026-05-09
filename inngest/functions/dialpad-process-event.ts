@@ -45,6 +45,20 @@ export const dialpadProcessEvent = inngest.createFunction(
       return { skipped: true, reason: "unrecognized" };
     }
 
+    // Filter to a single Dialpad user (Rayan@schoolconex.com) when configured.
+    // Skip events for any other user — still mark processed so we don't retry.
+    const filterUserId = process.env.DIALPAD_FILTER_USER_ID;
+    const evUserId =
+      (raw.payload as { user_id?: string | number; target_id?: string | number; target?: { id?: string | number } } | null)?.user_id ??
+      (raw.payload as { target?: { id?: string | number } } | null)?.target?.id;
+    if (filterUserId && evUserId != null && String(evUserId) !== filterUserId) {
+      await db
+        .update(integrationEventsRaw)
+        .set({ processedAt: new Date(), error: `filtered: user_id=${evUserId}` })
+        .where(eq(integrationEventsRaw.id, rawEventId));
+      return { skipped: true, reason: "filtered-user" };
+    }
+
     const externalPhone =
       ev.direction === "inbound" ? ev.external_number : ev.internal_number;
 

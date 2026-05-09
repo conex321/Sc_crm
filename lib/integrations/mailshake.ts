@@ -52,13 +52,73 @@ export async function addRecipientToCampaign(opts: {
   return { id };
 }
 
-export async function listCampaigns(): Promise<Array<{ id: number; title: string }>> {
-  const res = await fetch(`${API_BASE}/campaigns/list?perPage=100`, {
-    headers: { ...authHeader() },
-  });
-  if (!res.ok) throw new Error(`Mailshake list campaigns: ${res.status}`);
-  const body = (await res.json()) as { results?: Array<{ id: number; title: string }> };
-  return body.results ?? [];
+export type MailshakeCampaignSummary = {
+  id: number;
+  title: string;
+  created?: string;
+  isArchived?: boolean;
+  isPaused?: boolean;
+  wizardStatus?: string;
+  url?: string;
+  sender?: { emailAddress?: string; fromName?: string };
+  messages?: Array<{ id: number; type: string; subject: string }>;
+};
+
+async function paginate<T>(initialPath: string, maxPages = 100): Promise<T[]> {
+  const out: T[] = [];
+  let url: string | null = `${API_BASE}${initialPath}`;
+  const seenTokens = new Set<string>();
+  let pages = 0;
+  while (url && pages < maxPages) {
+    const currentUrl: string = url;
+    const res = await fetch(currentUrl, { headers: { ...authHeader() } });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Mailshake ${currentUrl}: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const body = (await res.json()) as { results?: T[]; nextToken?: string };
+    if (body.results) out.push(...body.results);
+    pages++;
+    if (body.nextToken && !seenTokens.has(body.nextToken)) {
+      seenTokens.add(body.nextToken);
+      const sep = currentUrl.includes("?") ? "&" : "?";
+      const base = currentUrl.replace(/([?&])nextToken=[^&]*/, "").replace(/[?&]$/, "");
+      url = `${base}${sep}nextToken=${encodeURIComponent(body.nextToken)}`;
+    } else {
+      url = null;
+    }
+  }
+  return out;
+}
+
+export async function listCampaigns(): Promise<MailshakeCampaignSummary[]> {
+  return paginate<MailshakeCampaignSummary>(`/campaigns/list?perPage=100`);
+}
+
+export type MailshakeLeadRow = {
+  id: number;
+  created?: string;
+  openedDate?: string;
+  lastStatusChangeDate?: string | null;
+  annotation?: string | null;
+  status: string;
+  recipient: {
+    id: number;
+    emailAddress: string;
+    fullName?: string;
+    isPaused?: boolean;
+    fields?: Record<string, string>;
+  };
+  campaign: { id: number; title?: string };
+  assignedTo?: { id: number; emailAddress?: string; fullName?: string } | null;
+};
+
+/**
+ * Iterate every lead for a campaign (paginated). A "lead" in Mailshake is any
+ * recipient that has triggered a tracked event (open / click / reply / etc.).
+ */
+export async function listLeads(campaignId: number | string): Promise<MailshakeLeadRow[]> {
+  return paginate<MailshakeLeadRow>(`/leads/list?campaignID=${campaignId}&perPage=100`);
 }
 
 /**

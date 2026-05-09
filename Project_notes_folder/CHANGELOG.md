@@ -95,3 +95,183 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
   with a sandboxed integration of each vendor (Stripe test mode, Twilio
   sandbox, Mailshake test campaign, Dialpad test webhook). The activation
   checklist for each integration is in the corresponding commit message.
+
+## 2026-05-06T05:00Z — Claude
+- session: 2026-05-06 Dialpad activation + demo user + e2e tests
+- decisions_added: [D-019, D-020, D-021, D-022]
+- failures_added: []
+- files_changed:
+    Dialpad: lib/integrations/dialpad-client.ts (new),
+      inngest/functions/dialpad-sync-rayan.ts (new + registered in index),
+      inngest/functions/dialpad-process-event.ts (added user_id filter),
+      scripts/dialpad-{lookup-user,list-calls,backfill}.mts (new),
+      scripts/check-calls.mts (new diagnostic),
+      package.json (added dialpad:* npm scripts)
+    Sign-in: scripts/{create-demo-user.sql, run-demo-user.mts, create-rayan-user.sql, run-rayan-user.mts, remove-rayan-user.mts} (new),
+      app/(auth)/login/{actions.ts, page.tsx} (added signInWithEmailPassword + form)
+    E2E: scripts/{e2e-rayan.mts, e2e-inbox-check.mts} (new)
+    UI tweak: app/(dashboard)/inbox/page.tsx (stale "Phase 3+" copy fixed)
+    Env: .env.local DIALPAD_API_KEY (admin), DIALPAD_FILTER_USER_ID=6598548464648192,
+      DIALPAD_FILTER_USER_EMAIL=Rayan@schoolconex.com,
+      DIALPAD_FILTER_USER_PHONE=+14375234132
+- data: 96 rows ingested into public.activities + public.calls (72 inbound / 24 outbound; 0 matched contacts because demo data has fake phones)
+- verified: e2e route walk passes 11/13 (2 are correct redirects); /inbox renders all 96 with correct durations + internal tags
+- next: address Drive integration + design Gmail sync per user request
+
+## 2026-05-06T07:00Z — Claude
+- session: 2026-05-06 Google Drive provisioning via Playwright browser automation
+- decisions_added: [D-023, D-024, D-025, D-026]
+- failures_added: [F-004, F-005]
+- files_changed:
+    Playwright + browser ops: package.json (playwright, @playwright/test devDeps),
+      scripts/browser-launch.mts + ~15 scripts/gcp-*.mts (probe, dismiss, action, find-and-fix, edit-client, click-download-by-row, debug-secret-buttons, list-projects, create-project, find-schoolconex-project, enable-apis, consent-screen, consent-wizard, finish-consent, finish-consent2, finish-consent3, pick-internal, radio-internal, finish-wizard-final, fill-contact-email, consent-allinone, save-and-verify-test-users, add-test-users, create-web-client, download-oauth-json, grab-secret, grab-web-client-secret, create-service-account, create-another-key, create-drive-folders, drive-smoke)
+    Env: GOOGLE_OAUTH_CLIENT_ID=489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n.apps.googleusercontent.com,
+      GOOGLE_OAUTH_CLIENT_SECRET=GOCSPX-... (in .env.local, NOT logged here),
+      GOOGLE_SERVICE_ACCOUNT_KEY={...} (single-line JSON),
+      GOOGLE_DRIVE_TEMPLATES_FOLDER_ID=1i0H2W1FZAvaxaOq0BXWGGQryRGpgCakZ,
+      GOOGLE_DRIVE_GENERATED_FOLDER_ID=1ZkPo1ApnIBqZhZzwm9LkEaMNG3aeHaaz,
+      GOOGLE_CLOUD_PROJECT_ID=schoolconex-crm
+    .secrets/service-account.json (gitignored)
+    .gitignore (added .playwright-profile, .playwright-shots, .secrets)
+- gcp-resources: project schoolconex-crm (#489266381443) under schoolconex.com org;
+    Drive API + Docs API enabled; OAuth consent (Internal); Web OAuth client + secret;
+    service account schoolconex-crm-drive@schoolconex-crm.iam.gserviceaccount.com;
+    two Drive folders shared with matthew@schoolconex.com as writer
+- verified: drive-smoke.mts passes for auth + folder read; Doc creation fails F-005
+- BLOCKED: F-005 (SA 0 Drive quota) before generate-from-template works end-to-end
+- next: resolve F-005 via Shared Drive (recommended) OR Domain-Wide Delegation; then re-run smoke + register a real template; then design Gmail sync
+
+## 2026-05-06T08:00Z — Claude
+- session: 2026-05-06 notes update (no code changes)
+- decisions_added: []
+- failures_added: []
+- files_changed: [Project_notes_folder/PROJECT_NOTES.md, Project_notes_folder/CHANGELOG.md, .claude/skills/update-project-notes/SKILL.md, .codex/skills/update-project-notes/SKILL.md]
+- next: same as previous entry
+
+## 2026-05-07T11:55Z — Claude
+- session: 2026-05-07 F-005 fix via Shared Drive (Option A)
+- decisions_added: [D-027]
+- failures_resolved: [F-005]
+- files_changed:
+    .env.local (GOOGLE_DRIVE_SHARED_DRIVE_ID=0AFnM-2HvmqO2Uk9PVA,
+      GOOGLE_DRIVE_TEMPLATES_FOLDER_ID=1T7ItO_S8O4sGsnftj3kWz04L1R0fJQPo,
+      GOOGLE_DRIVE_GENERATED_FOLDER_ID=1NR8wyn013tPE2NLWl4ke5OSc4UDJiXZj,
+      legacy My-Drive folder IDs preserved as *_LEGACY comments)
+    scripts/drive-smoke.mts (re-enabled full create+delete cycle with supportsAllDrives:true)
+    scripts/drive-create-shared-drive.mts (NEW, browser-driven Shared Drive creation)
+    scripts/drive-add-sa-member.mts (NEW, browser-driven attempt — superseded by OAuth flow)
+    scripts/drive-finish-add-sa.mts (NEW, browser-driven attempt — superseded by OAuth flow)
+    scripts/drive-oauth-add-sa.mts (NEW, OAuth loopback flow that adds SA via Drive REST API)
+    scripts/drive-create-folders-in-sd.mts (NEW, idempotent folder bootstrap inside Shared Drive)
+    scripts/drive-wait-signin.mts / drive-wait-cloud-console.mts (NEW, CDP wait helpers)
+    scripts/drive-snap.mts / cdp-probe.mts (NEW, debug utilities)
+    scripts/gcp-add-redirect-uri-do.mts / gcp-add-redirect-v2.mts / gcp-verify-redirect.mts (NEW, register loopback redirect URI on OAuth client)
+    Project_notes_folder/PROJECT_NOTES.md
+    Project_notes_folder/CHANGELOG.md
+    .claude/skills/update-project-notes/SKILL.md (next D-028)
+    .codex/skills/update-project-notes/SKILL.md (next D-028)
+- gcp-resources: Shared Drive id=0AFnM-2HvmqO2Uk9PVA name="SchoolConex CRM";
+    SA added as organizer (Content Manager) via Drive REST permissions.create;
+    OAuth Web client now has redirect URIs:
+      http://localhost:3000/auth/google-drive-callback (pre-existing),
+      http://localhost:53682/oauth/callback (new, for admin tasks)
+- verified: drive-smoke passes full auth + read + Google-Doc create + driveId verification + delete
+- next: register a real contract template at /settings/templates; wire lib/integrations/google/drive.ts to use new env vars + supportsAllDrives:true; end-to-end test the generate-contract flow on a real opportunity
+
+## 2026-05-07T22:29:25Z — Codex
+- session: 2026-05-07 validation + Rayan email probe
+- decisions_added: [D-028]
+- failures_added: [F-006]
+- files_changed:
+    .env.local (normalized DIALPAD_FILTER_USER_EMAIL to rayan@schoolconex.com)
+    .env.example (documented GOOGLE_DRIVE_SHARED_DRIVE_ID and Dialpad Rayan filter vars)
+    scripts/dialpad-list-calls.mts (prints target/contact email + phone fields)
+    scripts/e2e-inbox-check.mts (updated smoke expectations for current inbox card rendering)
+    scripts/e2e-rayan.mts (updated authenticated redirect expectations)
+    Project_notes_folder/PROJECT_NOTES.md
+    Project_notes_folder/CHANGELOG.md
+- verified:
+    npm run typecheck
+    npx tsx scripts/dialpad-lookup-user.mts rayan@schoolconex.com
+    npx tsx scripts/dialpad-list-calls.mts 3 (pulled 3 records via Rayan user_id; outbound samples show target_email=rayan@schoolconex.com)
+    npx tsx scripts/e2e-inbox-check.mts
+    npx tsx scripts/e2e-rayan.mts (13/13 routes ok)
+    npx tsx scripts/drive-smoke.mts (Shared Drive create/delete; driveId=0AFnM-2HvmqO2Uk9PVA)
+- blocked: Gmail mailbox pull for rayan@schoolconex.com is not authorized yet; service-account impersonation with gmail.readonly returns 401 unauthorized_client (F-006)
+- next: choose Gmail auth path (Workspace Domain-Wide Delegation recommended for admin-managed ingestion, or per-user Gmail OAuth if Rayan should consent directly)
+
+## 2026-05-08T04:32:57Z — Codex
+- session: 2026-05-08 full verification sweep
+- decisions_added: [D-029, D-030]
+- failures_added: [F-007, F-008]
+- failures_resolved: [F-007, F-008]
+- files_changed:
+    lib/supabase/middleware.ts (public allowlist now includes /api/webhooks and /api/inngest)
+    package.json / package-lock.json (added server-only)
+    .env.local (added INNGEST_DEV=1 for local verification)
+    .env.example (documented INNGEST_DEV local-vs-prod behavior)
+    Project_notes_folder/PROJECT_NOTES.md
+    Project_notes_folder/CHANGELOG.md
+- verified:
+    npm run typecheck
+    npm run build
+    scripts/e2e-rayan.mts (13/13 routes ok)
+    scripts/e2e-inbox-check.mts
+    dynamic route smoke using real DB IDs (10/10 routes ok)
+    webhook no-op smoke (Dialpad/Mailshake/Stripe/WhatsApp hit route handlers, no login redirect)
+    production-server smoke on port 3002: GET /api/inngest returned metadata with function_count=6 and mode=dev
+    scripts/drive-smoke.mts (Shared Drive create/delete)
+    scripts/dialpad-lookup-user.mts rayan@schoolconex.com
+    scripts/dialpad-list-calls.mts 5
+    scripts/check-calls.mts
+    Gmail probe still returns 401 unauthorized_client (F-006 remains open)
+- blockers:
+    Gmail mailbox sync for Rayan still needs Workspace DWD or per-user Gmail OAuth
+    catalog/products/packages/contract_templates tables are empty, so contract generation/catalog UX cannot be fully exercised with real data
+    npm run lint is broken under Next 16; direct eslint also errors on config
+    npm run format:check reports 137 files needing Prettier
+    npm audit reports 7 moderate advisories, no high/critical release blocker observed
+
+## 2026-05-09T06:55Z — Claude
+- session: 2026-05-09 Mailshake activation (single-file mode)
+- decisions_added: [D-031, D-032]
+- failures_added: [F-009]
+- files_changed: [.env.local (MAILSHAKE_API_KEY + MAILSHAKE_WEBHOOK_SECRET), lib/db/schema.ts, supabase/migrations/0004_mailshake_campaigns_rls.sql, lib/integrations/mailshake.ts, lib/integrations/mailshake-sync.ts, lib/crm/mailshake.ts, inngest/functions/mailshake-sync-campaigns.ts, inngest/functions/index.ts, components/layout/app-sidebar.tsx, app/(dashboard)/campaigns/page.tsx, app/(dashboard)/campaigns/[id]/page.tsx, app/(dashboard)/accounts/[id]/page.tsx, app/(dashboard)/settings/integrations/page.tsx, scripts/mailshake-list-campaigns.mts, scripts/mailshake-probe.mts, scripts/mailshake-probe2.mts, scripts/mailshake-probe3.mts, scripts/mailshake-sync.mts, scripts/mailshake-stats.mts, scripts/mailshake-status-distribution.mts, scripts/mailshake-import-accounts.mts, scripts/mailshake-e2e-validate.mts, package.json]
+- next: Register webhook URL in Mailshake dashboard to activate real-time event tracking + reply text on activity timeline (open question #22).
+
+## 2026-05-09T14:50Z — Codex
+- session: 2026-05-09 Mailshake full verification
+- decisions_added: []
+- failures_added: [F-010]
+- files_changed: [lib/db/index.ts, scripts/mailshake-sync.mts, scripts/mailshake-import-accounts.mts, Project_notes_folder/PROJECT_NOTES.md, Project_notes_folder/CHANGELOG.md]
+- verified: Pre-fix sync log reached final Mailshake counts but the CLI process did not exit before timeout; root cause identified as an unclosed shared Postgres client.
+- next: Re-run Mailshake CLI, typecheck/build, route smoke, and Playwright validation after the script shutdown fix.
+
+## 2026-05-09T15:05Z — Codex
+- session: 2026-05-09 Mailshake UI verification fixes
+- decisions_added: []
+- failures_added: [F-011]
+- files_changed: [app/(dashboard)/campaigns/page.tsx, app/(dashboard)/settings/integrations/page.tsx, Project_notes_folder/PROJECT_NOTES.md, Project_notes_folder/CHANGELOG.md]
+- verified: Strict browser probe identified `/campaigns` defaulting to 28 non-archived campaigns and the Mailshake integration card omitting matched-account count before the fix.
+- next: Re-run strict authenticated Mailshake UI assertions, typecheck, and build.
+
+## 2026-05-09T15:15Z — Codex
+- session: 2026-05-09 Mailshake full verification closeout
+- decisions_added: []
+- failures_added: []
+- failures_resolved: [F-010, F-011]
+- files_changed: [Project_notes_folder/PROJECT_NOTES.md, Project_notes_folder/CHANGELOG.md]
+- verified:
+    npm run mailshake:sync -- --rematch (exit 0, scanned 305)
+    npm run mailshake:sync (exit 0, 29 campaigns, 305 leads, 301 matched accounts)
+    npm run mailshake:stats (29 campaigns, 305 leads, 301 matched, last sync 2026-05-09 10:53 EDT)
+    DB relationship audit (288 open / 13 ignored / 4 closed, 274 accounts with leads, 0 blank emails, 0 orphan campaign/account links, campaign 930352 = 110 leads / 107 schools)
+    strict authenticated Playwright probe (15/15 checks passed for /campaigns, /campaigns/930352, account Campaigns tab, /settings/integrations)
+    scripts/mailshake-e2e-validate.mts (exit 0, screenshots refreshed, campaign detail rows 107)
+    npm run typecheck
+    npm run build
+    GET /api/inngest (200, function_count=7, mode=dev)
+    POST /api/webhooks/mailshake invalid JSON (400 invalid JSON, route handler reached)
+    scripts/e2e-rayan.mts (13/13 core routes ok)
+    scripts/e2e-inbox-check.mts (Rayan Dialpad calls render on /inbox)
+- blockers: Gmail mailbox ingestion for rayan@schoolconex.com still blocked by F-006; Mailshake per-email events/reply body still require external webhook registration + `MAILSHAKE_WEBHOOK_SECRET`.

@@ -5,6 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Pencil, Building2, Globe, Phone, MapPin } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { getAccount } from "@/lib/crm/accounts";
 import { listContactsForAccount } from "@/lib/crm/contacts";
 import { listOpportunitiesForAccount } from "@/lib/crm/opportunities";
@@ -14,6 +22,8 @@ import {
   listActiveTemplates,
   isDriveConnected,
 } from "@/lib/crm/documents";
+import { listAccountCampaignActivity } from "@/lib/crm/mailshake";
+import { ExternalLink, Send } from "lucide-react";
 import { ContactList } from "@/components/crm/contact-list";
 import { OpportunityList } from "@/components/crm/opportunity-list";
 import { ActivityTimeline } from "@/components/crm/activity-timeline";
@@ -32,15 +42,23 @@ export default async function AccountDetailPage(props: {
   const account = await getAccount(id);
   if (!account) notFound();
 
-  const [contacts, opportunities, activities, documents, templates, driveConnected] =
-    await Promise.all([
-      listContactsForAccount(id),
-      listOpportunitiesForAccount(id),
-      listActivitiesForAccount(id, 50),
-      listDocumentsForAccount(id),
-      listActiveTemplates(),
-      isDriveConnected(user.id),
-    ]);
+  const [
+    contacts,
+    opportunities,
+    activities,
+    documents,
+    templates,
+    driveConnected,
+    campaignActivity,
+  ] = await Promise.all([
+    listContactsForAccount(id),
+    listOpportunitiesForAccount(id),
+    listActivitiesForAccount(id, 50),
+    listDocumentsForAccount(id),
+    listActiveTemplates(),
+    isDriveConnected(user.id),
+    listAccountCampaignActivity(id),
+  ]);
 
   return (
     <div className="px-6 py-5">
@@ -113,6 +131,12 @@ export default async function AccountDetailPage(props: {
               {documents.length}
             </Badge>
           </TabsTrigger>
+          <TabsTrigger value="campaigns">
+            Campaigns{" "}
+            <Badge variant="secondary" className="ml-2 px-1.5 py-0 text-[10px]">
+              {campaignActivity.length}
+            </Badge>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="activity" className="mt-3 space-y-4">
@@ -132,6 +156,93 @@ export default async function AccountDetailPage(props: {
 
         <TabsContent value="opportunities" className="mt-3">
           <OpportunityList accountId={account.id} opportunities={opportunities} />
+        </TabsContent>
+
+        <TabsContent value="campaigns" className="mt-3">
+          {campaignActivity.length === 0 ? (
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              <Send className="mx-auto mb-2 size-5 opacity-50" />
+              No Mailshake activity matched to this account yet.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {campaignActivity.map((c) => (
+                <div key={c.campaign_id} className="rounded-md border">
+                  <div className="flex items-center justify-between border-b px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/campaigns/${c.mailshake_id}`}
+                        className="text-sm font-medium hover:underline"
+                      >
+                        {c.title}
+                      </Link>
+                      {c.is_archived ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          archived
+                        </Badge>
+                      ) : c.is_paused ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          paused
+                        </Badge>
+                      ) : (
+                        <Badge className="text-[10px]">active</Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                      <span>
+                        <strong className="text-foreground">{c.total}</strong> recipients ·{" "}
+                        <strong className="text-foreground">{c.engaged}</strong> open ·{" "}
+                        <strong className="text-foreground">{c.closed}</strong> closed
+                      </span>
+                      {c.url && (
+                        <a
+                          href={c.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 hover:text-foreground"
+                        >
+                          Mailshake <ExternalLink className="size-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Recipient</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last change</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {c.leads.map((l) => (
+                        <TableRow key={l.email}>
+                          <TableCell>
+                            <div className="text-sm">{l.full_name ?? l.email}</div>
+                            {l.full_name && (
+                              <div className="text-[11px] text-muted-foreground">
+                                {l.email}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-[10px]">
+                              {l.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {l.last_status_change_at
+                              ? new Date(l.last_status_change_at).toLocaleString()
+                              : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="documents" className="mt-3 space-y-3">

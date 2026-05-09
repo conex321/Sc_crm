@@ -25,12 +25,14 @@ import {
   FileCode,
   Package,
   BarChart3,
+  Send,
 } from "lucide-react";
 import type { User } from "@/lib/db/schema";
 
 const NAV = [
   { href: "/accounts", label: "Accounts", icon: Building2 },
   { href: "/opportunities", label: "Opportunities", icon: KanbanSquare },
+  { href: "/campaigns", label: "Campaigns", icon: Send },
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
 ] as const;
 
