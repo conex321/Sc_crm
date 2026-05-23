@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/mailshake-sync",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/dialpad-sync",
+      "schedule": "0 7 * * *"
+    }
+  ]
+}

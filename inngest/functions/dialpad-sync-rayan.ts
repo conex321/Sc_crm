@@ -1,11 +1,13 @@
 import { inngest } from "../client";
 import { db } from "@/lib/db";
-import { integrationEventsRaw, calls } from "@/lib/db/schema";
+import { integrationEventsRaw, calls, users } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import {
   iterateCalls,
   durationSeconds,
   getRecordingUrl,
+  getTranscript,
+  flattenTranscript,
   type DialpadCall,
 } from "@/lib/integrations/dialpad-client";
 import { recordActivity } from "@/lib/integrations/record-activity";
@@ -13,6 +15,23 @@ import { matchPhoneToContact } from "@/lib/integrations/contact-matcher";
 
 const FILTER_USER_ID = process.env.DIALPAD_FILTER_USER_ID ?? "";
 const FILTER_USER_PHONE = process.env.DIALPAD_FILTER_USER_PHONE ?? "";
+const FILTER_USER_EMAIL = process.env.DIALPAD_FILTER_USER_EMAIL ?? "";
+
+let cachedFilterUserCrmId: string | null | undefined;
+async function getFilterUserCrmId(): Promise<string | null> {
+  if (cachedFilterUserCrmId !== undefined) return cachedFilterUserCrmId;
+  if (!FILTER_USER_EMAIL) {
+    cachedFilterUserCrmId = null;
+    return null;
+  }
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.googleEmail}) = ${FILTER_USER_EMAIL.toLowerCase()}`)
+    .limit(1);
+  cachedFilterUserCrmId = rows[0]?.id ?? null;
+  return cachedFilterUserCrmId;
+}
 
 function humanizeDuration(seconds?: number | null) {
   if (!seconds) return "0:00";
@@ -40,6 +59,7 @@ async function ingestCall(c: DialpadCall, rawId: string) {
   const dur = durationSeconds(c);
   const summary = `${c.direction === "inbound" ? "Inbound" : "Outbound"} call · ${humanizeDuration(dur)}${c.call_disposition ? ` · ${c.call_disposition}` : ""}${isInternal ? " · internal" : ""}`;
 
+  const filterUserId = await getFilterUserCrmId();
   const a = await recordActivity({
     channel: "call",
     direction: c.direction,
@@ -47,6 +67,7 @@ async function ingestCall(c: DialpadCall, rawId: string) {
     occurredAt: startedAt ? new Date(startedAt) : new Date(),
     accountId: match?.accountId ?? null,
     contactId: match?.contactId ?? null,
+    userId: filterUserId,
   });
 
   await db
@@ -58,7 +79,9 @@ async function ingestCall(c: DialpadCall, rawId: string) {
       toNumber: c.direction === "inbound" ? c.internal_number ?? null : c.external_number ?? null,
       durationSeconds: dur,
       recordingUrl: getRecordingUrl(c),
-      transcriptText: c.transcription_text ?? null,
+      transcriptText:
+        c.transcription_text ??
+        flattenTranscript(await getTranscript(c.call_id).catch(() => null)),
       disposition: c.call_disposition ?? null,
     })
     .onConflictDoNothing({ target: calls.dialpadCallId });

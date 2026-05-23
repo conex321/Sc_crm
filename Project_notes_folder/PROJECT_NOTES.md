@@ -1,9 +1,9 @@
 # Project Notes — SchoolConex CRM
 
-**Last updated:** 2026-05-09
-**Last agent:** Codex
-**Session summary:** Mailshake full verification completed. Live sync exits cleanly and still reports 29 campaigns / 305 leads / 301 matched leads; `/campaigns`, `/campaigns/930352`, account Campaigns tab, `/settings/integrations`, Inngest cron, and public webhook smoke all pass. Fixed F-010 (Mailshake CLI DB shutdown) and F-011 (`/campaigns` default count + integration matched-count display). Gmail mailbox ingestion for Rayan remains blocked by F-006.
-**Notes mode:** single-file (line count <500)
+**Last updated:** 2026-05-22
+**Last agent:** Claude
+**Session summary:** Diagnosed why Rayan's call logs weren't attaching to accounts (F-012). Root cause: D-032 imported 274 schools as accounts but never imported the recipients as contacts, so the Dialpad phone matcher had nothing to match against — 0/96 calls linked. Fix: D-033 (`npm run mailshake:import-contacts`) lifted 295 contacts out of `mailshake_leads.fields` (225 with normalized phones). Backfilled 31 missing Dialpad calls from May 5→22 (F-013: local Inngest cron isn't firing — `inngest-cli` dev server not running on :8288, so 17 days of calls were missed). After backfill + rematch: 127 calls ingested, 3 matched to accounts (e.g. Baig Academy / Javed Faruqui). The remaining 124 unmatched are with frequent callers (+14164107226 ×20 inbound, +16476672479 ×9, +16478856485 ×9, etc.) who are NOT in any Mailshake campaign — they need either manual contact entry or a Mailshake outreach to auto-link.
+**Notes mode:** single-file (line count ≈540 — split when convenient)
 
 ---
 
@@ -224,6 +224,11 @@ The persistent-notes system is live in single-file mode. The skill auto-runs aft
 **Why:** Mailshake's REST API does not expose per-event endpoints (probed `/sentEmails`, `/opens`, `/clicks`, `/replies`, `/messages` — all 404). Polling can only reflect the lead-pipeline status. Webhooks are the only path for actual event tracking. The handler already exists, so activation is a one-time URL registration in the Mailshake dashboard.
 **How to apply:** Run `npm run mailshake:sync` to manually trigger Layer 1. Register `https://<deployed-host>/api/webhooks/mailshake` in Mailshake → Account → Webhooks for events `sent`, `open`, `click`, `reply`, `bounce`, then set `MAILSHAKE_WEBHOOK_SECRET` in env. Use `tsx --conditions=react-server` for any tsx script that imports the libs that pull `server-only` (the `react-server` condition resolves the package to its no-op `empty.js`).
 
+### D-033 — Auto-import contacts from Mailshake recipients — 2026-05-22
+**Decision:** Companion to D-032. For every `mailshake_leads` row with a matched `account_id` and an email, auto-create a CRM contact with `first_name`/`last_name` from `fields.first`/`fields.last` (fall back to splitting `full_name`), `email` from the lead, `phone` from `fields.phoneNumber` (normalized E.164, defaulting US +1 for 10-digit numbers), `role` from `fields.title`, `external_ids = { mailshake_lead_id }`. Update `mailshake_leads.contact_id` to link back. Wired as `npm run mailshake:import-contacts` (with `--dry`). First run: 295 contacts created (225 with normalized phones). Idempotent (dedup on `(account_id, lower(email))`). Uses raw `postgres` not Drizzle — avoids the `--conditions=react-server` complication.
+**Why:** Without contacts, the Dialpad call matcher (`matchPhoneToContact`) has nothing to match against. D-032 created the schools but left them empty — calls to/from real recipients all landed in the Unmatched Inbox even when Mailshake already had their phone. After this fix, the phone matcher correctly links calls to accounts. Proven: 1 Baig Academy call (Javed Faruqui, 647-268-3320) matched immediately on first rematch run.
+**How to apply:** Run after `mailshake:import-accounts` whenever new schools/recipients land. Then `npm run dialpad:rematch-calls` to retroactively link historical calls. Reversible: `delete from contacts where external_ids ? 'mailshake_lead_id'`. Cron does NOT yet run this (open question #26) — operator-triggered for now.
+
 ### D-032 — Auto-import schools from Mailshake `recipient.fields.account` — 2026-05-09
 **Decision:** When a lead row's `recipient.fields.account` (Mailshake's school-name field) doesn't match any CRM account, auto-create the account with `name = trim(fields.account)`, `type = 'school'`, `source = 'mailshake'`, then re-match leads. Idempotent (case-insensitive name dedup against existing accounts). Wired as `npm run mailshake:import-accounts` (with `--dry` for preview). First run created 274 accounts, lifted match rate from 0/305 to 301/305 (98.7%).
 **Why:** Mailshake recipients are pre-existing in Mailshake but the CRM started empty. Manually creating 274 schools is friction; auto-import makes the per-school view immediately useful.
@@ -414,6 +419,19 @@ The persistent-notes system is live in single-file mode. The skill auto-runs aft
 **Root cause:** `scripts/mailshake-sync.mts` and `scripts/mailshake-import-accounts.mts` imported the shared Drizzle/Postgres singleton from `lib/db` without closing its underlying `postgres` client in script mode.
 **Fix:** Exported `closeDb()` from `lib/db/index.ts` and wrapped both Mailshake CLI entrypoints in `finally { await closeDb(); }`. The Inngest cron path still uses the shared app client and does not close it per invocation.
 **Guardrail:** Any future one-shot script that imports `lib/db` must close the shared client before process exit.
+
+### F-013 — Inngest crons not firing locally (silently stale data) — 2026-05-22 (DOCUMENTED)
+**Issue:** Last Dialpad call ingested was 2026-05-05; user opened a session on 2026-05-22 — 17 days of calls were missing despite the cron being registered (`/api/inngest` reports `function_count:7, mode:dev`). Same risk applies to `mailshake-sync-campaigns` (last_synced_at also stale).
+**Root cause:** Inngest's local dev mode (`INNGEST_DEV=1`) requires the Inngest CLI dev server running on port 8288 (`npx inngest-cli@latest dev`) to actually fire registered cron triggers. Without it, crons are registered but nothing calls them. `curl http://localhost:8288` → connection refused.
+**Workaround applied:** `npm run dialpad:backfill -- 20` to pull May 5→May 22 calls (31 new ingested). Same pattern works for Mailshake: `npm run mailshake:sync`.
+**Long-term fix:** Either (a) operator runs `npx inngest-cli@latest dev` in another terminal alongside `npm run dev`, or (b) deploy the app + set `INNGEST_SIGNING_KEY` + `INNGEST_EVENT_KEY` so Inngest Cloud fires the crons. Don't trust local dev for ongoing data freshness.
+**Guardrail:** Production deployment must set `INNGEST_SIGNING_KEY` and unset `INNGEST_DEV`. Consider adding a heartbeat probe (e.g. dashboard widget "last cron run") so stale syncs are visible to operators.
+
+### F-012 — Dialpad calls produced 0/96 account matches — 2026-05-22 (RESOLVED 2026-05-22)
+**Issue:** User flagged "Rayan's call logs aren't being pulled into the accounts he called". Audit confirmed: 0/96 calls matched to accounts despite 277 accounts existing.
+**Root cause:** D-032 imported 274 schools as accounts but D-032 alone leaves the schools empty. The Dialpad matcher (`matchPhoneToContact` in `lib/integrations/contact-matcher.ts`) queries the `contacts` table — which only had 4 demo rows. No contacts with real phones → no possible match. The matching mechanism itself was always correct; the data simply wasn't there.
+**Fix:** D-033 (`npm run mailshake:import-contacts`) materializes contacts from `mailshake_leads.fields`. Then `scripts/dialpad-rematch-calls.mts` walks every `activities.account_id IS NULL` call, looks up the external number against the now-populated phone index (E.164 + last-7-digits fallback), and updates `account_id` + `contact_id`. After fix + 31-call backfill + rematch: 3/127 calls matched (the 1 historical Baig Academy + 2 newly-ingested calls auto-matched at insert time). The remaining 124 calls are with numbers genuinely NOT in any Mailshake campaign — the matcher is working; the data overlap is just small for now.
+**Guardrail:** D-032 and D-033 must run together — never import schools without recipients. Open question #26 proposes folding both into the Inngest cron.
 
 ### F-011 — Mailshake UI default/counts did not fully reflect live snapshot — 2026-05-09 (RESOLVED 2026-05-09)
 **Issue:** `/campaigns` defaulted to 28 non-archived campaigns instead of all 29 synced campaigns, and `/settings/integrations` showed campaigns/leads but not the 301/305 account-match count.

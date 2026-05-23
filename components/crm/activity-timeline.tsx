@@ -43,6 +43,7 @@ export function ActivityTimeline({ activities }: { activities: TimelineActivity[
         const Icon = meta.icon;
         const note = Array.isArray(a.note) ? a.note[0] : a.note;
         const task = Array.isArray(a.task) ? a.task[0] : a.task;
+        const call = Array.isArray(a.call) ? a.call[0] : a.call;
         return (
           <li
             key={a.id}
@@ -71,6 +72,44 @@ export function ActivityTimeline({ activities }: { activities: TimelineActivity[
                 </time>
               </div>
               <div className="mt-1 text-sm">{a.summary}</div>
+              {call && a.channel === "call" && (
+                <div className="mt-2 space-y-1.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
+                    {call.from_number && (
+                      <span>
+                        <span className="font-medium text-foreground">From:</span>{" "}
+                        <span className="tabular-nums">{call.from_number}</span>
+                      </span>
+                    )}
+                    {call.to_number && (
+                      <span>
+                        <span className="font-medium text-foreground">To:</span>{" "}
+                        <span className="tabular-nums">{call.to_number}</span>
+                      </span>
+                    )}
+                    {call.recording_url && (
+                      <a
+                        href={call.recording_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline hover:text-foreground"
+                      >
+                        Recording
+                      </a>
+                    )}
+                  </div>
+                  {call.transcript_text && (
+                    <details className="rounded border bg-muted/40 px-2 py-1.5">
+                      <summary className="cursor-pointer text-[11px] font-medium text-muted-foreground">
+                        Transcript ({call.transcript_text.length.toLocaleString()} chars)
+                      </summary>
+                      <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-snug text-foreground/90">
+                        {call.transcript_text}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              )}
               {note?.body && (
                 <p className="mt-2 whitespace-pre-wrap text-xs text-muted-foreground">
                   {note.body}

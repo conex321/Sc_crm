@@ -31,10 +31,19 @@ export type TimelineActivity = {
     completed_at: string | null;
     assigned_user_id: string | null;
   } | null;
+  call: {
+    dialpad_call_id: string | null;
+    from_number: string | null;
+    to_number: string | null;
+    duration_seconds: number | null;
+    recording_url: string | null;
+    transcript_text: string | null;
+    disposition: string | null;
+  } | null;
 };
 
 const SELECT =
-  "id, account_id, contact_id, opportunity_id, user_id, channel, direction, occurred_at, summary, created_at, user:user_id(id, full_name), note:notes(body), task:tasks(title, due_at, completed_at, assigned_user_id)";
+  "id, account_id, contact_id, opportunity_id, user_id, channel, direction, occurred_at, summary, created_at, user:user_id(id, full_name), note:notes(body), task:tasks(title, due_at, completed_at, assigned_user_id), call:calls(dialpad_call_id, from_number, to_number, duration_seconds, recording_url, transcript_text, disposition)";
 
 export async function listActivitiesForAccount(
   accountId: string,

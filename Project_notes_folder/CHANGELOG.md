@@ -275,3 +275,17 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
     scripts/e2e-rayan.mts (13/13 core routes ok)
     scripts/e2e-inbox-check.mts (Rayan Dialpad calls render on /inbox)
 - blockers: Gmail mailbox ingestion for rayan@schoolconex.com still blocked by F-006; Mailshake per-email events/reply body still require external webhook registration + `MAILSHAKE_WEBHOOK_SECRET`.
+
+## 2026-05-22T23:15Z — Claude
+- session: 2026-05-22 diagnosis — Rayan's calls not matching to accounts (single-file mode)
+- decisions_added: [D-033]
+- failures_added: [F-010, F-011]
+- files_changed: [scripts/status-audit.mts, scripts/mailshake-import-contacts.mts, scripts/dialpad-rematch-calls.mts, scripts/unmatched-numbers.mts, package.json (status:audit, mailshake:import-contacts, dialpad:rematch-calls)]
+- next: Consider folding mailshake:import-contacts + dialpad:rematch-calls into the Inngest cron (open Q #26) so future calls auto-link without manual intervention. Also start inngest-cli locally OR move to Inngest Cloud to make the 30-min sync actually fire (F-011).
+
+## 2026-05-22T23:15Z — Claude
+- session: 2026-05-22 diagnosis — Rayan's calls not matching to accounts (single-file mode)
+- decisions_added: [D-033]
+- failures_added: [F-012, F-013]
+- files_changed: [scripts/status-audit.mts, scripts/mailshake-import-contacts.mts, scripts/dialpad-rematch-calls.mts, scripts/unmatched-numbers.mts, package.json]
+- next: Fold mailshake:import-contacts + dialpad:rematch-calls into Inngest cron (open Q #26) so future calls auto-link. Start inngest-cli locally OR move to Inngest Cloud so the 30-min syncs actually fire (F-013).

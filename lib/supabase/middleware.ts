@@ -12,6 +12,7 @@ const PUBLIC_PATHS = [
   "/api/inngest",
   "/api/health",
   "/api/webhooks",
+  "/api/cron",
 ];
 
 export async function updateSession(request: NextRequest) {

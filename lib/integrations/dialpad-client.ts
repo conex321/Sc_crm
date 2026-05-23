@@ -96,6 +96,53 @@ export async function listCalls(opts: {
   return dpFetch<{ items: DialpadCall[]; cursor?: string }>(`/call?${params.toString()}`);
 }
 
+export type DialpadTranscriptLine = {
+  name?: string;
+  content?: string;
+  time?: string;
+  type?: "transcript" | "system" | string;
+  contact_id?: string;
+};
+
+export type DialpadTranscript = {
+  call_id: string;
+  lines: DialpadTranscriptLine[];
+};
+
+/**
+ * Fetch the per-call transcript from Dialpad. Available only when the
+ * workspace has transcription enabled and the call was actually transcribed
+ * (some calls — voicemail-only, very short, certain regions — won't have one).
+ *
+ * Returns `null` when the call has no transcript (404). Throws on other
+ * errors so the caller can decide whether to retry.
+ */
+export async function getTranscript(
+  callId: string,
+): Promise<DialpadTranscript | null> {
+  const res = await fetch(`${BASE_URL}/transcripts/${callId}`, {
+    headers: { ...authHeader(), Accept: "application/json" },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Dialpad transcripts/${callId} → ${res.status}: ${body.slice(0, 200)}`);
+  }
+  return (await res.json()) as DialpadTranscript;
+}
+
+/** Convert a transcript payload into a single plain-text block for storage. */
+export function flattenTranscript(t: DialpadTranscript | null): string | null {
+  if (!t || !Array.isArray(t.lines) || t.lines.length === 0) return null;
+  const lines: string[] = [];
+  for (const l of t.lines) {
+    if (!l?.content) continue;
+    const speaker = (l.name ?? "").trim();
+    lines.push(speaker ? `${speaker}: ${l.content}` : l.content);
+  }
+  return lines.length > 0 ? lines.join("\n") : null;
+}
+
 export async function* iterateCalls(opts: {
   userId: string | number;
   startedAfter: number;

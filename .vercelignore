@@ -1,0 +1,10 @@
+.playwright-profile/
+.playwright-shots/
+.secrets/
+.dev-server.log
+.next
+node_modules
+.env.local
+.env.*.local
+Project_notes_folder/
+docs/
