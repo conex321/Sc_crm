@@ -1,20 +1,29 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import postgres, { type Sql } from "postgres";
 import * as schema from "./schema";
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is not set");
+// Lazy init: Next 16's "collect page data" build phase imports this module
+// without env vars set. Defer connection until first query. Caches singleton.
+let _client: Sql | null = null;
+let _db: PostgresJsDatabase<typeof schema> | null = null;
+
+function getDb(): PostgresJsDatabase<typeof schema> {
+  if (_db) return _db;
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set");
+  _client = postgres(url, { prepare: false, max: 10 });
+  _db = drizzle(_client, { schema });
+  return _db;
 }
 
-// Server-only Drizzle client. Bypasses Supabase RLS — use with care.
-// For RLS-aware queries from Server Actions, prefer the Supabase server client.
-const queryClient = postgres(process.env.DATABASE_URL, {
-  prepare: false, // required for Supabase pooler compatibility
-  max: 10,
+// Proxy preserves `db.select(...)` call sites while deferring env check.
+export const db = new Proxy({} as PostgresJsDatabase<typeof schema>, {
+  get(_target, prop, receiver) {
+    return Reflect.get(getDb(), prop, receiver);
+  },
 });
 
-export const db = drizzle(queryClient, { schema });
 export async function closeDb() {
-  await queryClient.end();
+  if (_client) await _client.end();
 }
 export { schema };

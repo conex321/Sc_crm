@@ -17,8 +17,18 @@ echo "=== 2/4 Pushing env vars to Vercel production ==="
 bash scripts/vercel-push-env.sh
 
 echo ""
-echo "=== 3/4 Deploying to production ==="
-DEPLOY_URL=$(npx vercel --prod --token="$VERCEL_TOKEN" --yes 2>&1 | tee /tmp/vercel-deploy.log | grep -oP 'https://[^ ]+\.vercel\.app' | tail -1)
+echo "=== 3a/4 Pulling Vercel prod env to local ==="
+npx vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+echo ""
+echo "=== 3b/4 Building locally (prebuilt) ==="
+npx vercel build --prod --token="$VERCEL_TOKEN"
+
+echo ""
+echo "=== 3c/4 Deploying prebuilt artifacts to production ==="
+DEPLOY_OUT=$(npx vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN" --yes 2>&1)
+echo "$DEPLOY_OUT"
+DEPLOY_URL=$(echo "$DEPLOY_OUT" | grep -oE 'https://[a-z0-9-]+\.vercel\.app' | tail -1)
 echo "Deployment URL: $DEPLOY_URL"
 
 echo ""
