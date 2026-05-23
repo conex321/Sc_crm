@@ -289,3 +289,31 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - failures_added: [F-012, F-013]
 - files_changed: [scripts/status-audit.mts, scripts/mailshake-import-contacts.mts, scripts/dialpad-rematch-calls.mts, scripts/unmatched-numbers.mts, package.json]
 - next: Fold mailshake:import-contacts + dialpad:rematch-calls into Inngest cron (open Q #26) so future calls auto-link. Start inngest-cli locally OR move to Inngest Cloud so the 30-min syncs actually fire (F-013).
+
+## 2026-05-23T20:35Z — Codex
+- session: 2026-05-23 integration coverage fix — Mailshake all recipients + Dialpad company-wide
+- decisions_added: [D-034]
+- failures_added: []
+- failures_resolved: [F-012 follow-up]
+- files_changed: [lib/integrations/mailshake-transform.ts, lib/integrations/mailshake.ts, lib/integrations/mailshake-sync.ts, lib/integrations/auto-pipeline.ts, lib/crm/mailshake.ts, app/(dashboard)/campaigns/page.tsx, lib/integrations/dialpad-client.ts, lib/integrations/dialpad.ts, app/api/cron/dialpad-sync/route.ts, inngest/functions/dialpad-process-event.ts, scripts/dialpad-backfill.mts, scripts/mailshake-sync.mts, tests/integration-sync.test.mts, Project_notes_folder/PROJECT_NOTES.md, Project_notes_folder/CHANGELOG.md]
+- verified: focused integration sync test passed; `tsc --noEmit` passed; Prettier check passed for touched files; Mailshake DB backfilled to 3,095 recipient rows with 3,060 account/contact matches; Dialpad company 30-day API vs DB check 57/57 calls, 0 missing, 10/57 recent matched, 21/57 recent transcripts.
+- next: Mailshake API was rate-limited until 2026-05-23T17:00:00-04:00 during final re-check; rerun live Mailshake API-vs-DB audit after the window if absolute same-minute confirmation is needed.
+
+## 2026-05-23T18:05Z — Claude
+- session: 2026-05-23 production deploy
+- decisions_added: [D-034]
+- failures_added: [F-014, F-015, F-016]
+- files_changed: [
+    .env.local (DATABASE_URL → pooler),
+    lib/db/index.ts (lazy init via Proxy),
+    app/api/google-drive/connect/route.ts (force-dynamic),
+    app/auth/google-drive-callback/route.ts (force-dynamic),
+    app/api/cron/dialpad-sync/route.ts (NEW),
+    app/api/cron/mailshake-sync/route.ts (calls runAutoPipeline),
+    lib/integrations/auto-pipeline.ts (NEW — schools+contacts+rematch),
+    vercel.json (two daily crons),
+    scripts/deploy-prod.sh, vercel-status.mts, vercel-alias-and-promote.mts,
+    find-supabase-pooler.mts, detect-supabase-region.mts, test-prod-crons.mts
+  ]
+- outcome: Production live at https://sc-crm-sand.vercel.app (dpl_Dk45rcBgVm6wE1VzMXQ6PnvtLQs8). Both Vercel crons return 200. Mailshake cron ingested 3095 engaged leads (3060 matched to accounts, 3060 to contacts) in 108s. Dialpad cron pulled 1 new call. Auto-pipeline ready.
+- next: User must rotate Vercel token (was pasted in chat) + register Mailshake webhook URL https://sc-crm-sand.vercel.app/api/webhooks/mailshake.
