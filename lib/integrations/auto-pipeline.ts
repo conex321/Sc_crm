@@ -42,16 +42,6 @@ function lastSeven(p: string | null | undefined): string | null {
   return d.length >= 7 ? d.slice(-7) : null;
 }
 
-function splitName(fullName: string | null, first: string | null, last: string | null) {
-  const f = first?.trim();
-  const l = last?.trim();
-  if (f || l) return { first: f || "(unknown)", last: l || "" };
-  if (!fullName) return { first: "(unknown)", last: "" };
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) return { first: parts[0], last: "" };
-  return { first: parts[0], last: parts.slice(1).join(" ") };
-}
-
 async function importMissingAccounts(): Promise<number> {
   const rows = await db.execute<{ school_name: string }>(sql`
     select distinct l.school_name
@@ -100,87 +90,62 @@ async function importMissingContacts(): Promise<{
   created: number;
   linked: number;
 }> {
-  const leads = await db.execute<{
-    id: string;
-    account_id: string;
-    email: string;
-    full_name: string | null;
-    first: string | null;
-    last: string | null;
-    phone_raw: string | null;
-    title: string | null;
-  }>(sql`
-    select l.id::text as id,
-           l.account_id::text as account_id,
-           lower(l.email) as email,
-           l.full_name,
-           l.fields->>'first' as first,
-           l.fields->>'last' as last,
-           l.fields->>'phoneNumber' as phone_raw,
-           l.fields->>'title' as title
-    from public.mailshake_leads l
-    where l.account_id is not null
-      and l.contact_id is null
-      and l.email is not null
-      and length(trim(l.email)) > 0
+  const inserted = await db.execute<{ id: string }>(sql`
+    with candidates as (
+      select distinct on (l.account_id, lower(l.email))
+             l.id,
+             l.account_id,
+             lower(l.email) as email,
+             coalesce(nullif(l.fields->>'first', ''), nullif(split_part(coalesce(l.full_name, ''), ' ', 1), ''), '(unknown)') as first_name,
+             coalesce(nullif(l.fields->>'last', ''), nullif(trim(regexp_replace(coalesce(l.full_name, ''), '^\\S+\\s*', '')), ''), '(unknown)') as last_name,
+             l.fields->>'title' as role,
+             regexp_replace(coalesce(l.fields->>'phoneNumber', ''), '\\D', '', 'g') as digits
+      from public.mailshake_leads l
+      where l.account_id is not null
+        and l.contact_id is null
+        and l.email is not null
+        and length(trim(l.email)) > 0
+      order by l.account_id, lower(l.email), l.updated_at desc
+    )
+    insert into public.contacts (
+      account_id, first_name, last_name, email, phone, role, external_ids
+    )
+    select c.account_id,
+           c.first_name,
+           c.last_name,
+           c.email,
+           case
+             when length(c.digits) = 10 then '+1' || c.digits
+             when length(c.digits) = 11 and left(c.digits, 1) = '1' then '+' || c.digits
+             when length(c.digits) > 7 then '+' || c.digits
+             else null
+           end,
+           c.role,
+           jsonb_build_object('mailshake_lead_id', c.id)
+    from candidates c
+    where not exists (
+      select 1
+      from public.contacts existing
+      where existing.deleted_at is null
+        and existing.account_id = c.account_id
+        and lower(existing.email) = c.email
+    )
+    returning id::text
   `);
 
-  if (leads.length === 0) return { created: 0, linked: 0 };
-
-  const existingContacts = await db.execute<{ account_id: string; email: string }>(sql`
-    select account_id::text as account_id, lower(email) as email
-    from public.contacts
-    where deleted_at is null and email is not null
+  const linked = await db.execute<{ id: string }>(sql`
+    update public.mailshake_leads l
+    set contact_id = c.id,
+        updated_at = now()
+    from public.contacts c
+    where l.contact_id is null
+      and l.account_id = c.account_id
+      and lower(l.email) = lower(c.email)
+      and c.deleted_at is null
+    returning l.id::text
   `);
-  const seen = new Set(existingContacts.map((e) => `${e.account_id}|${e.email}`));
 
-  let created = 0;
-  let linked = 0;
-  for (const l of leads) {
-    const key = `${l.account_id}|${l.email}`;
-    if (seen.has(key)) {
-      // Just link the lead to the existing contact
-      const existing = await db.execute<{ id: string }>(sql`
-        select id::text from public.contacts
-        where deleted_at is null
-          and account_id = ${l.account_id}::uuid
-          and lower(email) = ${l.email}
-        limit 1
-      `);
-      if (existing[0]) {
-        await db
-          .update(mailshakeLeads)
-          .set({ contactId: existing[0].id, updatedAt: new Date() })
-          .where(eq(mailshakeLeads.id, l.id));
-        linked++;
-      }
-      continue;
-    }
-    const { first, last } = splitName(l.full_name, l.first, l.last);
-    const phone = normalizePhone(l.phone_raw);
-    const inserted = await db
-      .insert(contacts)
-      .values({
-        accountId: l.account_id,
-        firstName: first,
-        lastName: last || "(unknown)",
-        email: l.email,
-        phone,
-        role: l.title ?? null,
-        externalIds: { mailshake_lead_id: l.id },
-      })
-      .returning({ id: contacts.id });
-    created++;
-    seen.add(key);
-    if (inserted[0]) {
-      await db
-        .update(mailshakeLeads)
-        .set({ contactId: inserted[0].id, updatedAt: new Date() })
-        .where(eq(mailshakeLeads.id, l.id));
-      linked++;
-    }
-  }
-  return { created, linked };
+  return { created: inserted.length, linked: linked.length };
 }
 
 async function rematchUnlinkedCalls(): Promise<number> {
@@ -213,7 +178,9 @@ async function rematchUnlinkedCalls(): Promise<number> {
       whatsappPhone: contacts.whatsappPhone,
     })
     .from(contacts)
-    .where(sql`${contacts.deletedAt} is null and (${contacts.phone} is not null or ${contacts.whatsappPhone} is not null)`);
+    .where(
+      sql`${contacts.deletedAt} is null and (${contacts.phone} is not null or ${contacts.whatsappPhone} is not null)`,
+    );
 
   const idx = new Map<string, { contactId: string; accountId: string }>();
   for (const c of contactRows) {
