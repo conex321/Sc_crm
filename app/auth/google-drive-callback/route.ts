@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { exchangeCodeForTokens, saveDriveTokens } from "@/lib/integrations/google/oauth";
 import { requireUser } from "@/lib/auth/session";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const user = await requireUser();
   const url = new URL(request.url);
