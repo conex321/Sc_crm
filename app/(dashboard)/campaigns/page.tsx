@@ -43,9 +43,9 @@ export default async function CampaignsPage(props: {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Mailshake campaigns</h1>
           <p className="text-xs text-muted-foreground">
-            {campaigns.length} campaigns · {activeCount} active · {totalLeads} engaged
-            recipients ({totalEngaged} open, {totalClosed} closed). Lead pipeline
-            synced every 30 min from Mailshake API.
+            {campaigns.length} campaigns · {activeCount} active · {totalLeads} total
+            recipients ({totalEngaged} open, {totalClosed} closed). Recipient and
+            lead pipeline synced daily from Mailshake API.
           </p>
         </div>
         <div className="flex rounded-md border bg-muted/20 p-1">
@@ -182,7 +182,7 @@ export default async function CampaignsPage(props: {
         <div className="mt-8">
           <div className="mb-2 flex items-baseline justify-between">
             <h2 className="text-sm font-semibold tracking-tight">
-              Top schools (by engaged recipients)
+              Top schools (by recipients)
             </h2>
             <p className="text-[11px] text-muted-foreground">
               {topSchools.length} schools · ranked by total leads in pipeline, ties

@@ -79,21 +79,31 @@ export async function getUser(userId: string | number): Promise<DialpadUser> {
  * `started_after` is an epoch-ms timestamp.
  */
 export async function listCalls(opts: {
-  userId: string | number;
+  userId?: string | number;
   startedAfter: number;
   startedBefore?: number;
   limit?: number;
   cursor?: string;
 }): Promise<{ items: DialpadCall[]; cursor?: string }> {
+  return dpFetch<{ items: DialpadCall[]; cursor?: string }>(buildCallsListPath(opts));
+}
+
+export function buildCallsListPath(opts: {
+  userId?: string | number;
+  startedAfter: number;
+  startedBefore?: number;
+  limit?: number;
+  cursor?: string;
+}) {
   const params = new URLSearchParams({
-    user_id: String(opts.userId),
     started_after: String(opts.startedAfter),
     // Dialpad caps page size at 50 for /api/v2/call
     limit: String(Math.min(opts.limit ?? 50, 50)),
   });
+  if (opts.userId) params.set("user_id", String(opts.userId));
   if (opts.startedBefore) params.set("started_before", String(opts.startedBefore));
   if (opts.cursor) params.set("cursor", opts.cursor);
-  return dpFetch<{ items: DialpadCall[]; cursor?: string }>(`/call?${params.toString()}`);
+  return `/call?${params.toString()}`;
 }
 
 export type DialpadTranscriptLine = {
@@ -144,7 +154,7 @@ export function flattenTranscript(t: DialpadTranscript | null): string | null {
 }
 
 export async function* iterateCalls(opts: {
-  userId: string | number;
+  userId?: string | number;
   startedAfter: number;
   startedBefore?: number;
   pageSize?: number;

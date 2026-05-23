@@ -1,14 +1,12 @@
 import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-// Mailshake's REST `/leads/list` endpoint exposes a CRM-style LEAD PIPELINE
-// status per engaged recipient. The actual email-event firehose (sent/opened/
-// clicked/replied/bounced) is delivered via Mailshake webhooks, which we
-// store separately in `email_events` (see /api/webhooks/mailshake + the
-// `mailshake_event` activity channel). This file deals with the lead
-// pipeline; full email event timelines live on the activity timeline.
+// Mailshake REST sync stores every campaign recipient in `mailshake_leads`,
+// then overlays `/leads/list` status for recipients that entered Mailshake's
+// lead pipeline. Full email event timelines live on the activity timeline.
 //
-// Lead status enum (observed): open | closed | ignored.
+// Lead status enum (observed): recipient | open | closed | ignored.
+//   recipient = campaign recipient not currently in Mailshake's lead pipeline
 //   open    = engaged recipient currently in your Mailshake lead pipeline
 //   closed  = lead closed (deal won / followed up off-platform)
 //   ignored = lead manually dismissed

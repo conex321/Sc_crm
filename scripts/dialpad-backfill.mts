@@ -1,4 +1,4 @@
-// Manual backfill: pull calls for DIALPAD_FILTER_USER_ID and ingest them
+// Manual backfill: pull company-wide Dialpad calls and ingest them
 // straight into Postgres (writing parent activities + calls child rows).
 // Run: tsx scripts/dialpad-backfill.mts [days=30]
 //
@@ -14,10 +14,11 @@ const token = process.env.DIALPAD_API_KEY;
 const userId = process.env.DIALPAD_FILTER_USER_ID;
 const databaseUrl = process.env.DATABASE_URL;
 const userPhone = process.env.DIALPAD_FILTER_USER_PHONE ?? "";
+const scope = process.env.DIALPAD_SYNC_SCOPE ?? "company";
 const days = Number(process.argv[2] ?? 30);
 
-if (!token || !userId || !databaseUrl) {
-  console.error("Need DIALPAD_API_KEY, DIALPAD_FILTER_USER_ID, DATABASE_URL");
+if (!token || !databaseUrl || (scope === "user" && !userId)) {
+  console.error("Need DIALPAD_API_KEY, DATABASE_URL, and DIALPAD_FILTER_USER_ID when DIALPAD_SYNC_SCOPE=user");
   process.exit(1);
 }
 
@@ -127,8 +128,8 @@ async function ingest(c: DialpadCall): Promise<"new" | "duplicate"> {
     ) values (
       ${activityId},
       ${c.call_id},
-      ${c.direction === "inbound" ? c.external_number ?? null : userPhone || c.internal_number || null},
-      ${c.direction === "inbound" ? c.internal_number ?? null : c.external_number ?? null},
+      ${c.direction === "inbound" ? c.external_number ?? c.contact?.phone ?? null : c.internal_number ?? c.target?.phone ?? (userPhone || null)},
+      ${c.direction === "inbound" ? c.internal_number ?? c.target?.phone ?? null : c.external_number ?? c.contact?.phone ?? null},
       ${durSec},
       ${recordingUrl(c)},
       ${c.transcription_text ?? null},
@@ -147,7 +148,9 @@ async function ingest(c: DialpadCall): Promise<"new" | "duplicate"> {
 
 async function main() {
   const startedAfter = Date.now() - days * 24 * 60 * 60 * 1000;
-  console.error(`Pulling Dialpad calls for user ${userId} since ${new Date(startedAfter).toISOString()}…`);
+  console.error(
+    `Pulling Dialpad ${scope === "user" ? `user ${userId}` : "company"} calls since ${new Date(startedAfter).toISOString()}…`,
+  );
 
   let cursor: string | undefined;
   let pulled = 0;
@@ -157,10 +160,10 @@ async function main() {
 
   do {
     const params = new URLSearchParams({
-      user_id: String(userId),
       started_after: String(startedAfter),
       limit: "50",
     });
+    if (scope === "user") params.set("user_id", String(userId));
     if (cursor) params.set("cursor", cursor);
     const res = await fetch(`https://dialpad.com/api/v2/call?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },

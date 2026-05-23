@@ -17,6 +17,18 @@ export type MailshakeRecipient = {
   fields?: Record<string, string>;
 };
 
+export type MailshakeRecipientRow = {
+  object?: "recipient" | string;
+  id: number;
+  emailAddress: string;
+  fullName?: string;
+  created?: string;
+  isPaused?: boolean;
+  first?: string;
+  last?: string;
+  fields?: Record<string, unknown>;
+};
+
 /**
  * Add a recipient to a Mailshake campaign.
  * Docs: https://api.mailshake.com/recipients/add
@@ -119,6 +131,14 @@ export type MailshakeLeadRow = {
  */
 export async function listLeads(campaignId: number | string): Promise<MailshakeLeadRow[]> {
   return paginate<MailshakeLeadRow>(`/leads/list?campaignID=${campaignId}&perPage=100`);
+}
+
+export async function listRecipients(
+  campaignId: number | string,
+): Promise<MailshakeRecipientRow[]> {
+  return paginate<MailshakeRecipientRow>(
+    `/recipients/list?campaignID=${campaignId}&perPage=100`,
+  );
 }
 
 /**

@@ -25,6 +25,7 @@ export const maxDuration = 300;
 const FILTER_USER_ID = process.env.DIALPAD_FILTER_USER_ID ?? "";
 const FILTER_USER_PHONE = process.env.DIALPAD_FILTER_USER_PHONE ?? "";
 const FILTER_USER_EMAIL = process.env.DIALPAD_FILTER_USER_EMAIL ?? "";
+const SYNC_SCOPE = process.env.DIALPAD_SYNC_SCOPE ?? "company";
 
 function toEpochMs(v?: string | number): number | undefined {
   if (v == null) return undefined;
@@ -76,8 +77,14 @@ async function ingestCall(c: DialpadCall, rawId: string, userId: string | null) 
     .values({
       activityId: a.id,
       dialpadCallId: c.call_id,
-      fromNumber: c.direction === "inbound" ? c.external_number ?? null : FILTER_USER_PHONE || c.internal_number || null,
-      toNumber: c.direction === "inbound" ? c.internal_number ?? null : c.external_number ?? null,
+      fromNumber:
+        c.direction === "inbound"
+          ? c.external_number ?? c.contact?.phone ?? null
+          : c.internal_number ?? c.target?.phone ?? (FILTER_USER_PHONE || null),
+      toNumber:
+        c.direction === "inbound"
+          ? c.internal_number ?? c.target?.phone ?? null
+          : c.external_number ?? c.contact?.phone ?? null,
       durationSeconds: dur,
       recordingUrl: getRecordingUrl(c),
       transcriptText:
@@ -109,9 +116,6 @@ export async function GET(req: NextRequest) {
   if (!process.env.DIALPAD_API_KEY) {
     return NextResponse.json({ skipped: "no-api-key" });
   }
-  if (!FILTER_USER_ID) {
-    return NextResponse.json({ skipped: "no-filter-user" });
-  }
 
   try {
     const watermark = await db
@@ -124,10 +128,12 @@ export async function GET(req: NextRequest) {
       : Date.now() - 30 * 24 * 60 * 60 * 1000;
 
     const userId = await getFilterUserCrmId();
+    const scopedUserId =
+      SYNC_SCOPE === "user" && FILTER_USER_ID ? FILTER_USER_ID : undefined;
     let pulled = 0;
     let inserted = 0;
     for await (const c of iterateCalls({
-      userId: FILTER_USER_ID,
+      userId: scopedUserId,
       startedAfter,
       pageSize: 100,
     })) {
@@ -154,6 +160,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
+      scope: scopedUserId ? "user" : "company",
       pulled,
       inserted,
       startedAfter,

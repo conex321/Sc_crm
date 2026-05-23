@@ -10,14 +10,37 @@ import { eq, sql } from "drizzle-orm";
 import {
   listCampaigns,
   listLeads,
+  listRecipients,
   type MailshakeCampaignSummary,
   type MailshakeLeadRow,
+  type MailshakeRecipientRow,
 } from "./mailshake";
+import { normalizeMailshakeRecipient } from "./mailshake-transform";
 
 export type SyncResult = {
   campaigns: { upserted: number };
   leads: { upserted: number; matchedAccount: number; matchedContact: number };
   perCampaign: Array<{ id: number; title: string; leadCount: number }>;
+};
+
+type MailshakeLeadValues = {
+  mailshakeLeadId: string;
+  campaignId: string;
+  mailshakeCampaignId: string;
+  recipientId: string | null;
+  email: string;
+  fullName: string | null;
+  schoolName: string | null;
+  accountId: string | null;
+  contactId: string | null;
+  status: string;
+  isPaused: boolean;
+  openedAt: Date | null;
+  lastStatusChangeAt: Date | null;
+  annotation: string | null;
+  assignedToEmail: string | null;
+  fields: Record<string, unknown>;
+  lastSyncedAt: Date;
 };
 
 /**
@@ -104,42 +127,18 @@ async function matchLead(
 }
 
 async function upsertLead(
-  campaignDbId: string,
-  campaignMailshakeId: string,
-  lead: MailshakeLeadRow,
-): Promise<{ matchedAccount: boolean; matchedContact: boolean }> {
-  const email = lead.recipient.emailAddress.trim().toLowerCase();
-  const schoolName = lead.recipient.fields?.account ?? null;
-  const match = await matchLead(email, schoolName);
-
-  const values = {
-    mailshakeLeadId: String(lead.id),
-    campaignId: campaignDbId,
-    mailshakeCampaignId: campaignMailshakeId,
-    recipientId: lead.recipient.id ? String(lead.recipient.id) : null,
-    email,
-    fullName: lead.recipient.fullName ?? null,
-    schoolName,
-    accountId: match.accountId,
-    contactId: match.contactId,
-    status: lead.status,
-    isPaused: lead.recipient.isPaused ?? false,
-    openedAt: lead.openedDate ? new Date(lead.openedDate) : null,
-    lastStatusChangeAt: lead.lastStatusChangeDate
-      ? new Date(lead.lastStatusChangeDate)
-      : null,
-    annotation: lead.annotation ?? null,
-    assignedToEmail: lead.assignedTo?.emailAddress ?? null,
-    fields: lead.recipient.fields ?? {},
-    lastSyncedAt: new Date(),
-  };
-
+  values: MailshakeLeadValues,
+): Promise<{ email: string; matchedAccount: boolean; matchedContact: boolean }> {
+  if (!values.email) {
+    return { email: "", matchedAccount: false, matchedContact: false };
+  }
   await db
     .insert(mailshakeLeads)
     .values(values)
     .onConflictDoUpdate({
-      target: mailshakeLeads.mailshakeLeadId,
+      target: [mailshakeLeads.mailshakeCampaignId, mailshakeLeads.email],
       set: {
+        mailshakeLeadId: values.mailshakeLeadId,
         campaignId: values.campaignId,
         mailshakeCampaignId: values.mailshakeCampaignId,
         recipientId: values.recipientId,
@@ -161,9 +160,69 @@ async function upsertLead(
     });
 
   return {
-    matchedAccount: match.accountId !== null,
-    matchedContact: match.contactId !== null,
+    email: values.email,
+    matchedAccount: values.accountId !== null,
+    matchedContact: values.contactId !== null,
   };
+}
+
+async function upsertRecipient(
+  campaignDbId: string,
+  campaignMailshakeId: string,
+  recipient: MailshakeRecipientRow,
+) {
+  const normalized = normalizeMailshakeRecipient(campaignMailshakeId, recipient);
+  const match = await matchLead(normalized.email, normalized.schoolName);
+  return upsertLead({
+    mailshakeLeadId: normalized.mailshakeLeadId,
+    campaignId: campaignDbId,
+    mailshakeCampaignId: normalized.mailshakeCampaignId,
+    recipientId: normalized.recipientId,
+    email: normalized.email,
+    fullName: normalized.fullName,
+    schoolName: normalized.schoolName,
+    accountId: match.accountId,
+    contactId: match.contactId,
+    status: normalized.status,
+    isPaused: normalized.isPaused,
+    openedAt: null,
+    lastStatusChangeAt: null,
+    annotation: null,
+    assignedToEmail: null,
+    fields: normalized.fields,
+    lastSyncedAt: new Date(),
+  });
+}
+
+async function upsertEngagedLead(
+  campaignDbId: string,
+  campaignMailshakeId: string,
+  lead: MailshakeLeadRow,
+) {
+  const email = lead.recipient.emailAddress.trim().toLowerCase();
+  const schoolName = lead.recipient.fields?.account ?? null;
+  const match = await matchLead(email, schoolName);
+  return upsertLead({
+    mailshakeLeadId: String(lead.id),
+    campaignId: campaignDbId,
+    mailshakeCampaignId: campaignMailshakeId,
+    recipientId: lead.recipient.id ? String(lead.recipient.id) : null,
+    email,
+    fullName: lead.recipient.fullName ?? null,
+    schoolName,
+    accountId: match.accountId,
+    contactId: match.contactId,
+    status: lead.status,
+    isPaused: lead.recipient.isPaused ?? false,
+    openedAt: lead.openedDate ? new Date(lead.openedDate) : null,
+    lastStatusChangeAt: lead.lastStatusChangeDate
+      ? new Date(lead.lastStatusChangeDate)
+      : null,
+    annotation: lead.annotation ?? null,
+    assignedToEmail: lead.assignedTo?.emailAddress ?? null,
+    fields: lead.recipient.fields ?? {},
+    lastSyncedAt: new Date(),
+  });
 }
 
 /**
@@ -174,19 +233,42 @@ export async function syncCampaign(
   campaign: MailshakeCampaignSummary,
 ): Promise<{ leadCount: number; matchedAccount: number; matchedContact: number }> {
   const campaignDbId = await upsertCampaign(campaign);
+  const matchedByEmail = new Map<
+    string,
+    { matchedAccount: boolean; matchedContact: boolean }
+  >();
+  const recipients = await listRecipients(campaign.id);
+  for (const recipient of recipients) {
+    const result = await upsertRecipient(campaignDbId, String(campaign.id), recipient);
+    if (result.email) {
+      matchedByEmail.set(result.email, {
+        matchedAccount: result.matchedAccount,
+        matchedContact: result.matchedContact,
+      });
+    }
+  }
+
   const leads = await listLeads(campaign.id);
-  let matchedAccount = 0;
-  let matchedContact = 0;
   for (const lead of leads) {
-    const { matchedAccount: mA, matchedContact: mC } = await upsertLead(
+    const result = await upsertEngagedLead(
       campaignDbId,
       String(campaign.id),
       lead,
     );
-    if (mA) matchedAccount++;
-    if (mC) matchedContact++;
+    if (result.email) {
+      matchedByEmail.set(result.email, {
+        matchedAccount: result.matchedAccount,
+        matchedContact: result.matchedContact,
+      });
+    }
   }
-  return { leadCount: leads.length, matchedAccount, matchedContact };
+  let matchedAccount = 0;
+  let matchedContact = 0;
+  for (const match of matchedByEmail.values()) {
+    if (match.matchedAccount) matchedAccount++;
+    if (match.matchedContact) matchedContact++;
+  }
+  return { leadCount: matchedByEmail.size, matchedAccount, matchedContact };
 }
 
 /**

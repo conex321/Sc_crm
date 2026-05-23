@@ -26,8 +26,12 @@ async function main() {
     console.log(`  matched contact:  ${result.leads.matchedContact}`);
     console.log(`per campaign:`);
     for (const c of result.perCampaign) {
-      console.log(`  [${c.id}] ${c.title}: ${c.leadCount} leads`);
+      console.log(`  [${c.id}] ${c.title}: ${c.leadCount} recipients`);
     }
+    const { runAutoPipeline } = await import("../lib/integrations/auto-pipeline");
+    const auto = await runAutoPipeline();
+    console.log("auto pipeline:");
+    console.log(JSON.stringify(auto, null, 2));
   } finally {
     await closeDb();
   }
