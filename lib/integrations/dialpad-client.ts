@@ -127,9 +127,7 @@ export type DialpadTranscript = {
  * Returns `null` when the call has no transcript (404). Throws on other
  * errors so the caller can decide whether to retry.
  */
-export async function getTranscript(
-  callId: string,
-): Promise<DialpadTranscript | null> {
+export async function getTranscript(callId: string): Promise<DialpadTranscript | null> {
   const res = await fetch(`${BASE_URL}/transcripts/${callId}`, {
     headers: { ...authHeader(), Accept: "application/json" },
   });
@@ -168,7 +166,8 @@ export async function* iterateCalls(opts: {
       limit: opts.pageSize ?? 100,
       cursor,
     });
-    for (const item of page.items) yield item;
+    // Dialpad returns `{}` (no `items` key) when the time window has no calls.
+    for (const item of page.items ?? []) yield item;
     cursor = page.cursor;
   } while (cursor);
 }

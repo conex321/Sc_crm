@@ -1,10 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import {
-  integrationEventsRaw,
-  calls as callsTable,
-  users,
-} from "@/lib/db/schema";
+import { integrationEventsRaw, calls as callsTable, users } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import {
   iterateCalls,
@@ -43,7 +39,30 @@ function humanize(seconds?: number | null) {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-async function getFilterUserCrmId(): Promise<string | null> {
+/**
+ * Resolve the CRM user that owned a Dialpad call. For outbound, that's the
+ * `user_id` (who placed it). For inbound, it's the `target.id` (who picked
+ * up). Falls back to the env-pinned filter user only when neither is set —
+ * preserves legacy single-user backfills.
+ */
+function pickDialpadOwnerId(c: DialpadCall): string | null {
+  const fromCall = c.direction === "inbound" ? c.target?.id : c.user_id;
+  const fallback = c.user_id ?? c.target?.id ?? null;
+  const id = fromCall ?? fallback;
+  return id == null ? null : String(id);
+}
+
+async function buildDialpadUserMap(): Promise<Map<string, string>> {
+  const rows = await db
+    .select({ id: users.id, dialpadUserId: users.dialpadUserId })
+    .from(users)
+    .where(sql`${users.dialpadUserId} is not null`);
+  const map = new Map<string, string>();
+  for (const r of rows) if (r.dialpadUserId) map.set(r.dialpadUserId, r.id);
+  return map;
+}
+
+async function getFallbackCrmUserId(): Promise<string | null> {
   if (!FILTER_USER_EMAIL) return null;
   const rows = await db
     .select({ id: users.id })
@@ -53,9 +72,13 @@ async function getFilterUserCrmId(): Promise<string | null> {
   return rows[0]?.id ?? null;
 }
 
-async function ingestCall(c: DialpadCall, rawId: string, userId: string | null) {
+async function ingestCall(
+  c: DialpadCall,
+  rawId: string,
+  resolvedUserId: string | null,
+) {
   const externalPhone =
-    c.direction === "inbound" ? c.external_number : c.contact?.phone ?? c.external_number;
+    c.direction === "inbound" ? c.external_number : (c.contact?.phone ?? c.external_number);
   const startedAt = toEpochMs(c.date_started ?? c.date_connected);
   const isInternal = c.contact?.email?.endsWith("@schoolconex.com") ?? false;
   const match = externalPhone && !isInternal ? await matchPhoneToContact(externalPhone) : null;
@@ -69,7 +92,7 @@ async function ingestCall(c: DialpadCall, rawId: string, userId: string | null) 
     occurredAt: startedAt ? new Date(startedAt) : new Date(),
     accountId: match?.accountId ?? null,
     contactId: match?.contactId ?? null,
-    userId,
+    userId: resolvedUserId,
   });
 
   await db
@@ -79,12 +102,12 @@ async function ingestCall(c: DialpadCall, rawId: string, userId: string | null) 
       dialpadCallId: c.call_id,
       fromNumber:
         c.direction === "inbound"
-          ? c.external_number ?? c.contact?.phone ?? null
-          : c.internal_number ?? c.target?.phone ?? (FILTER_USER_PHONE || null),
+          ? (c.external_number ?? c.contact?.phone ?? null)
+          : (c.internal_number ?? c.target?.phone ?? (FILTER_USER_PHONE || null)),
       toNumber:
         c.direction === "inbound"
-          ? c.internal_number ?? c.target?.phone ?? null
-          : c.external_number ?? c.contact?.phone ?? null,
+          ? (c.internal_number ?? c.target?.phone ?? null)
+          : (c.external_number ?? c.contact?.phone ?? null),
       durationSeconds: dur,
       recordingUrl: getRecordingUrl(c),
       transcriptText:
@@ -123,15 +146,16 @@ export async function GET(req: NextRequest) {
       .from(integrationEventsRaw)
       .where(eq(integrationEventsRaw.provider, "dialpad"));
     const lastSeenMs = watermark[0]?.ts ? new Date(watermark[0].ts).getTime() : null;
-    const startedAfter = lastSeenMs
-      ? lastSeenMs - 60_000
-      : Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const startedAfter = lastSeenMs ? lastSeenMs - 60_000 : Date.now() - 30 * 24 * 60 * 60 * 1000;
 
-    const userId = await getFilterUserCrmId();
-    const scopedUserId =
-      SYNC_SCOPE === "user" && FILTER_USER_ID ? FILTER_USER_ID : undefined;
+    const [userMap, fallbackUserId] = await Promise.all([
+      buildDialpadUserMap(),
+      getFallbackCrmUserId(),
+    ]);
+    const scopedUserId = SYNC_SCOPE === "user" && FILTER_USER_ID ? FILTER_USER_ID : undefined;
     let pulled = 0;
     let inserted = 0;
+    const ownerCounts: Record<string, number> = {};
     for await (const c of iterateCalls({
       userId: scopedUserId,
       startedAfter,
@@ -152,7 +176,12 @@ export async function GET(req: NextRequest) {
         .returning({ id: integrationEventsRaw.id });
       if (rows[0]) {
         inserted++;
-        await ingestCall(c, rows[0].id, userId);
+        const dialpadOwnerId = pickDialpadOwnerId(c);
+        const resolvedUserId =
+          (dialpadOwnerId && userMap.get(dialpadOwnerId)) || fallbackUserId;
+        const ownerKey = dialpadOwnerId ?? "(unknown)";
+        ownerCounts[ownerKey] = (ownerCounts[ownerKey] ?? 0) + 1;
+        await ingestCall(c, rows[0].id, resolvedUserId);
       }
     }
 
@@ -163,14 +192,13 @@ export async function GET(req: NextRequest) {
       scope: scopedUserId ? "user" : "company",
       pulled,
       inserted,
+      ownerCounts,
+      knownReps: userMap.size,
       startedAfter,
       auto,
       ranAt: new Date().toISOString(),
     });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: (err as Error).message },
-      { status: 500 },
-    );
+    return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 });
   }
 }

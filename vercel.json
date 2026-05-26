@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/dialpad-sync",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/gmail-sync",
+      "schedule": "0 9 * * *"
     }
   ]
 }

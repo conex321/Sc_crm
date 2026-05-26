@@ -13,10 +13,19 @@ export default async function IntegrationsPage(props: {
   const sb = await getSupabaseServerClient();
   const { data: rows = [] } = await sb
     .from("integration_credentials")
-    .select("provider, scopes, expires_at, updated_at")
+    .select("provider, scopes, expires_at, updated_at, metadata")
     .eq("user_id", user.id);
 
   const drive = (rows ?? []).find((r) => r.provider === "google_drive");
+  const gmail = (rows ?? []).find((r) => r.provider === "google_gmail");
+  const gmailEmail =
+    gmail && typeof gmail.metadata === "object" && gmail.metadata !== null
+      ? ((gmail.metadata as { email?: string }).email ?? null)
+      : null;
+
+  const { count: emailMessageCount } = await sb
+    .from("email_messages")
+    .select("activity_id", { count: "exact", head: true });
 
   const { count: mailshakeCampaigns } = await sb
     .from("mailshake_campaigns")
@@ -149,6 +158,42 @@ export default async function IntegrationsPage(props: {
                 {drive.scopes.join(", ")}
               </span>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Gmail</CardTitle>
+              {gmail ? (
+                <Badge variant="default">Connected</Badge>
+              ) : (
+                <Badge variant="secondary">Not connected</Badge>
+              )}
+            </div>
+            <CardDescription className="text-xs">
+              Scope: <code>gmail.readonly</code>. Per-rep — connect your own
+              mailbox so threads with CRM contacts land on the account timeline.
+              Daily sync at 09:00 UTC.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs">
+            <div className="flex items-center gap-2">
+              <Button asChild size="sm">
+                <a href="/api/gmail/connect">
+                  {gmail ? "Reconnect" : "Connect Gmail"}
+                </a>
+              </Button>
+              {gmailEmail && (
+                <span className="text-[11px] text-muted-foreground">
+                  {gmailEmail}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Messages indexed</span>
+              <span className="tabular-nums">{emailMessageCount ?? 0}</span>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -65,6 +65,10 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey(),
   fullName: text("full_name").notNull(),
   googleEmail: text("google_email").notNull().unique(),
+  // Dialpad rep identity. Required for per-rep call attribution on the daily
+  // company-wide sync — `activities.user_id` is resolved from the call's
+  // `user_id` / `target.id` against this column.
+  dialpadUserId: text("dialpad_user_id").unique(),
   role: userRoleEnum("role").notNull().default("rep"),
   isActive: boolean("is_active").notNull().default(true),
   ...auditCols,
@@ -320,6 +324,28 @@ export const emailEvents = pgTable("email_events", {
   eventType: text("event_type"),
 });
 
+// ─── email_messages (Gmail mailbox sync — Phase D / 2026-05-26) ──────
+// 1:1 child of activities (channel='email_inbound' | 'email_outbound').
+// Stores the raw message headers + body so the timeline can render full
+// content without re-hitting Gmail. Per-rep — `activities.user_id` is the
+// rep whose mailbox the message came from.
+export const emailMessages = pgTable("email_messages", {
+  activityId: uuid("activity_id")
+    .primaryKey()
+    .references(() => activities.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("gmail"),
+  providerMessageId: text("provider_message_id").notNull().unique(),
+  threadId: text("thread_id"),
+  fromAddress: text("from_address"),
+  toAddresses: jsonb("to_addresses").notNull().default([]),
+  ccAddresses: jsonb("cc_addresses").notNull().default([]),
+  subject: text("subject"),
+  snippet: text("snippet"),
+  bodyText: text("body_text"),
+  bodyHtml: text("body_html"),
+  internalDate: timestamp("internal_date", { withTimezone: true }),
+});
+
 // ─── mailshake_campaigns (Phase 5 — campaign metadata sync) ───────────
 export const mailshakeCampaigns = pgTable("mailshake_campaigns", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -501,6 +527,8 @@ export type NewOpportunityLineItem = typeof opportunityLineItems.$inferInsert;
 export type Call = typeof calls.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type EmailEvent = typeof emailEvents.$inferSelect;
+export type EmailMessage = typeof emailMessages.$inferSelect;
+export type NewEmailMessage = typeof emailMessages.$inferInsert;
 export type MailshakeCampaign = typeof mailshakeCampaigns.$inferSelect;
 export type NewMailshakeCampaign = typeof mailshakeCampaigns.$inferInsert;
 export type MailshakeLead = typeof mailshakeLeads.$inferSelect;
