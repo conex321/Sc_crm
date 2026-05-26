@@ -136,19 +136,14 @@ export async function listLeads(campaignId: number | string): Promise<MailshakeL
 export async function listRecipients(
   campaignId: number | string,
 ): Promise<MailshakeRecipientRow[]> {
-  return paginate<MailshakeRecipientRow>(
-    `/recipients/list?campaignID=${campaignId}&perPage=100`,
-  );
+  return paginate<MailshakeRecipientRow>(`/recipients/list?campaignID=${campaignId}&perPage=100`);
 }
 
 /**
  * Verify a Mailshake webhook signature (Mailshake supports HMAC-SHA256
  * over the raw body using the configured webhook secret).
  */
-export function verifyMailshakeSignature(
-  rawBody: string,
-  signatureHeader: string | null,
-): boolean {
+export function verifyMailshakeSignature(rawBody: string, signatureHeader: string | null): boolean {
   const secret = process.env.MAILSHAKE_WEBHOOK_SECRET;
   if (!secret) return false;
   if (!signatureHeader) return false;

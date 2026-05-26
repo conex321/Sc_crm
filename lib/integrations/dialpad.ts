@@ -6,10 +6,7 @@ import crypto from "node:crypto";
  * Dialpad signs the raw body using HMAC-SHA256 with a workspace-level secret
  * and includes it in the `X-Dialpad-Signature` header.
  */
-export function verifyDialpadSignature(
-  rawBody: string,
-  signatureHeader: string | null,
-): boolean {
+export function verifyDialpadSignature(rawBody: string, signatureHeader: string | null): boolean {
   const secret = process.env.DIALPAD_WEBHOOK_SECRET;
   if (!secret) return false;
   if (!signatureHeader) return false;
@@ -45,13 +42,16 @@ export function extractCallEvent(payload: unknown): DialpadCallEvent | null {
   const nested = (p.call as Record<string, unknown> | undefined) ?? undefined;
   const callId = (p.call_id ?? p.id ?? nested?.id) as string | undefined;
   if (!callId) return null;
+  const direction = ((p.direction as string) ?? "inbound") as "inbound" | "outbound";
+  const from = p.from as string | undefined;
+  const to = p.to as string | undefined;
   return {
     call_id: callId,
     event_type: (p.event_type as string) ?? "call_completed",
-    direction: ((p.direction as string) ?? "inbound") as "inbound" | "outbound",
+    direction,
     contact: p.contact as { phone?: string } | undefined,
-    external_number: (p.external_number as string) ?? (p.from as string),
-    internal_number: (p.internal_number as string) ?? (p.to as string),
+    external_number: (p.external_number as string) ?? (direction === "inbound" ? from : to),
+    internal_number: (p.internal_number as string) ?? (direction === "inbound" ? to : from),
     duration: typeof p.duration === "number" ? (p.duration as number) : undefined,
     recording_url: (p.recording_url as string) ?? undefined,
     voicemail_url: (p.voicemail_url as string) ?? undefined,

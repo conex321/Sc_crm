@@ -83,6 +83,9 @@ async function upsertCampaign(c: MailshakeCampaignSummary): Promise<string> {
 }
 
 type AccountMatch = { accountId: string | null; contactId: string | null };
+type LeadMatcher = {
+  match(email: string, schoolName: string | null): AccountMatch;
+};
 
 /**
  * Resolve a Mailshake lead → CRM account/contact.
@@ -90,10 +93,7 @@ type AccountMatch = { accountId: string | null; contactId: string | null };
  * 2) Fall back to matching `fields.account` (school name) to accounts.name
  *    (case-insensitive, deleted_at is null)
  */
-async function matchLead(
-  email: string,
-  schoolName: string | null,
-): Promise<AccountMatch> {
+async function matchLead(email: string, schoolName: string | null): Promise<AccountMatch> {
   const normalized = email.trim().toLowerCase();
 
   if (normalized) {
@@ -124,6 +124,45 @@ async function matchLead(
   }
 
   return { accountId: null, contactId: null };
+}
+
+async function loadLeadMatcher(): Promise<LeadMatcher> {
+  const contactRows = await db
+    .select({
+      id: contactsTable.id,
+      accountId: contactsTable.accountId,
+      email: contactsTable.email,
+    })
+    .from(contactsTable)
+    .where(sql`${contactsTable.deletedAt} is null and ${contactsTable.email} is not null`);
+  const accountRows = await db
+    .select({ id: accountsTable.id, name: accountsTable.name })
+    .from(accountsTable)
+    .where(sql`${accountsTable.deletedAt} is null`);
+
+  const contactsByEmail = new Map<string, { accountId: string; contactId: string }>();
+  for (const row of contactRows) {
+    const email = row.email?.trim().toLowerCase();
+    if (email && !contactsByEmail.has(email)) {
+      contactsByEmail.set(email, { accountId: row.accountId, contactId: row.id });
+    }
+  }
+
+  const accountsByName = new Map<string, string>();
+  for (const row of accountRows) {
+    const name = row.name.trim().toLowerCase();
+    if (name && !accountsByName.has(name)) accountsByName.set(name, row.id);
+  }
+
+  return {
+    match(email: string, schoolName: string | null) {
+      const contact = contactsByEmail.get(email.trim().toLowerCase());
+      if (contact) return contact;
+
+      const accountId = schoolName ? accountsByName.get(schoolName.trim().toLowerCase()) : null;
+      return { accountId: accountId ?? null, contactId: null };
+    },
+  };
 }
 
 async function upsertLead(
@@ -170,9 +209,12 @@ async function upsertRecipient(
   campaignDbId: string,
   campaignMailshakeId: string,
   recipient: MailshakeRecipientRow,
+  matcher?: LeadMatcher,
 ) {
   const normalized = normalizeMailshakeRecipient(campaignMailshakeId, recipient);
-  const match = await matchLead(normalized.email, normalized.schoolName);
+  const match = matcher
+    ? matcher.match(normalized.email, normalized.schoolName)
+    : await matchLead(normalized.email, normalized.schoolName);
   return upsertLead({
     mailshakeLeadId: normalized.mailshakeLeadId,
     campaignId: campaignDbId,
@@ -198,10 +240,11 @@ async function upsertEngagedLead(
   campaignDbId: string,
   campaignMailshakeId: string,
   lead: MailshakeLeadRow,
+  matcher?: LeadMatcher,
 ) {
   const email = lead.recipient.emailAddress.trim().toLowerCase();
   const schoolName = lead.recipient.fields?.account ?? null;
-  const match = await matchLead(email, schoolName);
+  const match = matcher ? matcher.match(email, schoolName) : await matchLead(email, schoolName);
   return upsertLead({
     mailshakeLeadId: String(lead.id),
     campaignId: campaignDbId,
@@ -215,9 +258,7 @@ async function upsertEngagedLead(
     status: lead.status,
     isPaused: lead.recipient.isPaused ?? false,
     openedAt: lead.openedDate ? new Date(lead.openedDate) : null,
-    lastStatusChangeAt: lead.lastStatusChangeDate
-      ? new Date(lead.lastStatusChangeDate)
-      : null,
+    lastStatusChangeAt: lead.lastStatusChangeDate ? new Date(lead.lastStatusChangeDate) : null,
     annotation: lead.annotation ?? null,
     assignedToEmail: lead.assignedTo?.emailAddress ?? null,
     fields: lead.recipient.fields ?? {},
@@ -231,15 +272,13 @@ async function upsertEngagedLead(
  */
 export async function syncCampaign(
   campaign: MailshakeCampaignSummary,
+  matcher?: LeadMatcher,
 ): Promise<{ leadCount: number; matchedAccount: number; matchedContact: number }> {
   const campaignDbId = await upsertCampaign(campaign);
-  const matchedByEmail = new Map<
-    string,
-    { matchedAccount: boolean; matchedContact: boolean }
-  >();
+  const matchedByEmail = new Map<string, { matchedAccount: boolean; matchedContact: boolean }>();
   const recipients = await listRecipients(campaign.id);
   for (const recipient of recipients) {
-    const result = await upsertRecipient(campaignDbId, String(campaign.id), recipient);
+    const result = await upsertRecipient(campaignDbId, String(campaign.id), recipient, matcher);
     if (result.email) {
       matchedByEmail.set(result.email, {
         matchedAccount: result.matchedAccount,
@@ -250,11 +289,7 @@ export async function syncCampaign(
 
   const leads = await listLeads(campaign.id);
   for (const lead of leads) {
-    const result = await upsertEngagedLead(
-      campaignDbId,
-      String(campaign.id),
-      lead,
-    );
+    const result = await upsertEngagedLead(campaignDbId, String(campaign.id), lead, matcher);
     if (result.email) {
       matchedByEmail.set(result.email, {
         matchedAccount: result.matchedAccount,
@@ -274,9 +309,7 @@ export async function syncCampaign(
 /**
  * Full sync: upsert all campaigns, then for each non-archived campaign sync leads.
  */
-export async function syncAllCampaigns(opts?: {
-  includeArchived?: boolean;
-}): Promise<SyncResult> {
+export async function syncAllCampaigns(opts?: { includeArchived?: boolean }): Promise<SyncResult> {
   const includeArchived = opts?.includeArchived ?? false;
   const campaigns = await listCampaigns();
 
@@ -291,15 +324,14 @@ export async function syncAllCampaigns(opts?: {
     result.campaigns.upserted++;
   }
 
-  const target = includeArchived
-    ? campaigns
-    : campaigns.filter((c) => !c.isArchived);
+  const target = includeArchived ? campaigns : campaigns.filter((c) => !c.isArchived);
+  const matcher = await loadLeadMatcher();
 
   for (const c of target) {
     try {
       // eslint-disable-next-line no-console
       console.error(`[mailshake-sync] ${c.id} ${c.title.slice(0, 60)}…`);
-      const { leadCount, matchedAccount, matchedContact } = await syncCampaign(c);
+      const { leadCount, matchedAccount, matchedContact } = await syncCampaign(c, matcher);
       result.leads.upserted += leadCount;
       result.leads.matchedAccount += matchedAccount;
       result.leads.matchedContact += matchedContact;
@@ -342,6 +374,7 @@ export async function rematchAllLeads(): Promise<{
   rematchedAccount: number;
   rematchedContact: number;
 }> {
+  const matcher = await loadLeadMatcher();
   const rows = await db
     .select({
       id: mailshakeLeads.id,
@@ -356,11 +389,8 @@ export async function rematchAllLeads(): Promise<{
   let rematchedContact = 0;
 
   for (const row of rows) {
-    const match = await matchLead(row.email, row.schoolName);
-    if (
-      match.accountId !== row.currentAccountId ||
-      match.contactId !== row.currentContactId
-    ) {
+    const match = matcher.match(row.email, row.schoolName);
+    if (match.accountId !== row.currentAccountId || match.contactId !== row.currentContactId) {
       await db
         .update(mailshakeLeads)
         .set({

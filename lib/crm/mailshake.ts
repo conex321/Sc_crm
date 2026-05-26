@@ -137,9 +137,7 @@ export async function getCampaignByMailshakeId(mailshakeId: string) {
   return data;
 }
 
-export async function listCampaignLeads(
-  campaignDbId: string,
-): Promise<LeadRow[]> {
+export async function listCampaignLeads(campaignDbId: string): Promise<LeadRow[]> {
   const sb = await getSupabaseServerClient();
   const { data, error } = await sb
     .from("mailshake_leads")
@@ -167,9 +165,7 @@ export type SchoolBucket = {
  * For a single campaign, group leads by school (account if matched, else
  * fields.account string). Returns sorted by total desc.
  */
-export async function listCampaignBySchool(
-  campaignDbId: string,
-): Promise<SchoolBucket[]> {
+export async function listCampaignBySchool(campaignDbId: string): Promise<SchoolBucket[]> {
   const leads = await listCampaignLeads(campaignDbId);
   const buckets = new Map<string, SchoolBucket>();
   for (const l of leads) {

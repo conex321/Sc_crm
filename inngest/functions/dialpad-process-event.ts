@@ -45,13 +45,24 @@ export const dialpadProcessEvent = inngest.createFunction(
       return { skipped: true, reason: "unrecognized" };
     }
 
-    // Filter to a single Dialpad user (Rayan@schoolconex.com) when configured.
-    // Skip events for any other user — still mark processed so we don't retry.
+    // Company-wide by default. Set DIALPAD_SYNC_SCOPE=user to keep the legacy
+    // single-user filter.
     const filterUserId = process.env.DIALPAD_FILTER_USER_ID;
+    const syncScope = process.env.DIALPAD_SYNC_SCOPE ?? "company";
     const evUserId =
-      (raw.payload as { user_id?: string | number; target_id?: string | number; target?: { id?: string | number } } | null)?.user_id ??
-      (raw.payload as { target?: { id?: string | number } } | null)?.target?.id;
-    if (filterUserId && evUserId != null && String(evUserId) !== filterUserId) {
+      (
+        raw.payload as {
+          user_id?: string | number;
+          target_id?: string | number;
+          target?: { id?: string | number };
+        } | null
+      )?.user_id ?? (raw.payload as { target?: { id?: string | number } } | null)?.target?.id;
+    if (
+      syncScope === "user" &&
+      filterUserId &&
+      evUserId != null &&
+      String(evUserId) !== filterUserId
+    ) {
       await db
         .update(integrationEventsRaw)
         .set({ processedAt: new Date(), error: `filtered: user_id=${evUserId}` })
@@ -59,8 +70,7 @@ export const dialpadProcessEvent = inngest.createFunction(
       return { skipped: true, reason: "filtered-user" };
     }
 
-    const externalPhone =
-      ev.direction === "inbound" ? ev.external_number : ev.internal_number;
+    const externalPhone = ev.external_number ?? ev.contact?.phone;
 
     let match = null as Awaited<ReturnType<typeof matchPhoneToContact>>;
     if (externalPhone) {
@@ -84,8 +94,14 @@ export const dialpadProcessEvent = inngest.createFunction(
         .values({
           activityId: a.id,
           dialpadCallId: ev.call_id,
-          fromNumber: ev.direction === "inbound" ? ev.external_number ?? null : ev.internal_number ?? null,
-          toNumber: ev.direction === "inbound" ? ev.internal_number ?? null : ev.external_number ?? null,
+          fromNumber:
+            ev.direction === "inbound"
+              ? (ev.external_number ?? null)
+              : (ev.internal_number ?? null),
+          toNumber:
+            ev.direction === "inbound"
+              ? (ev.internal_number ?? null)
+              : (ev.external_number ?? null),
           durationSeconds: ev.duration ?? null,
           recordingUrl: ev.recording_url ?? ev.voicemail_url ?? null,
           disposition: ev.call_disposition ?? null,

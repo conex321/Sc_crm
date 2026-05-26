@@ -317,3 +317,39 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
   ]
 - outcome: Production live at https://sc-crm-sand.vercel.app (dpl_Dk45rcBgVm6wE1VzMXQ6PnvtLQs8). Both Vercel crons return 200. Mailshake cron ingested 3095 engaged leads (3060 matched to accounts, 3060 to contacts) in 108s. Dialpad cron pulled 1 new call. Auto-pipeline ready.
 - next: User must rotate Vercel token (was pasted in chat) + register Mailshake webhook URL https://sc-crm-sand.vercel.app/api/webhooks/mailshake.
+
+## 2026-05-26T15:35Z — Claude
+- session: 2026-05-26 audit + per-rep activation
+- decisions_added: [D-035, D-036]
+- failures_added: [F-017]
+- failures_resolved: [F-006 — Gmail per-user OAuth path lands; awaits redirect URI registration]
+- files_changed: [
+    app/(dashboard)/settings/integrations/page.tsx (Gmail card),
+    app/api/cron/dialpad-sync/route.ts (per-call user lookup + ownerCounts),
+    app/api/cron/gmail-sync/route.ts (NEW — daily, watermarked per-rep),
+    app/api/gmail/connect/route.ts (NEW),
+    app/auth/gmail-callback/route.ts (NEW),
+    lib/db/schema.ts (+ users.dialpad_user_id, + email_messages table),
+    lib/integrations/dialpad-client.ts (page.items ?? [] guard),
+    lib/integrations/google/gmail.ts (NEW — OAuth + Gmail v1 client),
+    scripts/audit-prod-state.mts (NEW),
+    scripts/dialpad-backfill.mts (mirror per-call lookup),
+    scripts/dialpad-reattribute-calls.mts (NEW — rewrites historical activities.user_id),
+    supabase/migrations/0005_users_dialpad_user_id.sql (NEW),
+    supabase/migrations/0006_email_messages.sql (NEW),
+    vercel.json (+ gmail-sync cron 09:00 UTC daily)
+  ]
+- verified: `npx tsc --noEmit` passed, `npm run build` passed (all new routes registered: /api/cron/gmail-sync, /api/gmail/connect, /auth/gmail-callback). Audit script confirmed 2695 accounts / 3899 contacts / 134 calls / Rayan present as admin a92a7a61.
+- audit_findings:
+    Mailshake daily cron healthy (29 campaigns, 3095 leads, 3060 matched).
+    Dialpad scheduled cron at 07:00 UTC today succeeded (134 calls in DB, +7 today).
+    Dialpad on-demand cron crashes during quiet windows (Dialpad returns `{}` not `{items:[]}` — F-017).
+    Per-rep call attribution incorrect: all 103 ingested calls credited to Rayan because env stamps every call with him.
+    Rayan exists in CRM as admin (PROJECT_NOTES line 50 was stale).
+    Gmail mailbox sync still 401 unauthorized_client via service account (F-006 root cause); per-user OAuth path now implemented as remediation.
+- pre_deploy_required:
+    User must run `npm run db:apply-migrations` to apply 0005 (users.dialpad_user_id + seed Rayan) and 0006 (email_messages + RLS) — harness blocks prod-DB writes from this session despite AskUserQuestion approval.
+    User must run `npx tsx scripts/dialpad-reattribute-calls.mts` after migration to re-stamp historical 134 calls.
+    User must add the new redirect URI `https://sc-crm-sand.vercel.app/auth/gmail-callback` (and localhost variant) to the schoolconex-crm OAuth Web client + add gmail.readonly to the OAuth consent screen before any rep clicks Connect Gmail.
+- deploy_status: Vercel preview build in progress at dpl_HVnP6jpztbFixFSBDhipjhyXgz32 (branch feat/mailshake-activation, commit 6815341). NOT alias-promoted to sc-crm-sand yet — promote only after migrations land, otherwise dialpad-sync cron will fail with "column users.dialpad_user_id does not exist".
+- next: After migrations + redirect URI registration, alias-promote dpl_HVnP6jpz... to production, smoke-test `/api/cron/dialpad-sync` for `ownerCounts` field, sign in as Rayan, click Connect Gmail, then hit `/api/cron/gmail-sync` to verify message ingestion.

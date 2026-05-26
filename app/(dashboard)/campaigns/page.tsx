@@ -42,13 +42,13 @@ export default async function CampaignsPage(props: {
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Mailshake campaigns</h1>
-          <p className="text-xs text-muted-foreground">
-            {campaigns.length} campaigns · {activeCount} active · {totalLeads} total
-            recipients ({totalEngaged} open, {totalClosed} closed). Recipient and
-            lead pipeline synced daily from Mailshake API.
+          <p className="text-muted-foreground text-xs">
+            {campaigns.length} campaigns · {activeCount} active · {totalLeads} total recipients (
+            {totalEngaged} open, {totalClosed} closed). Recipient and lead pipeline synced daily
+            from Mailshake API.
           </p>
         </div>
-        <div className="flex rounded-md border bg-muted/20 p-1">
+        <div className="bg-muted/20 flex rounded-md border p-1">
           <Link
             href="/campaigns?archived=0"
             className={`rounded px-3 py-1 text-xs font-medium transition ${
@@ -74,10 +74,10 @@ export default async function CampaignsPage(props: {
 
       {!webhookSet && (
         <div className="mb-4 rounded-md border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-200">
-          <strong>Tip · activate real-time email events:</strong> Mailshake&apos;s REST
-          API only exposes <em>lead pipeline</em> status (open / closed / ignored).
-          To pull individual <strong>sent / opened / clicked / replied / bounced</strong>{" "}
-          events with reply text, register the webhook URL{" "}
+          <strong>Tip · activate real-time email events:</strong> Mailshake&apos;s REST API only
+          exposes <em>lead pipeline</em> status (open / closed / ignored). To pull individual{" "}
+          <strong>sent / opened / clicked / replied / bounced</strong> events with reply text,
+          register the webhook URL{" "}
           <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">
             https://&lt;your-host&gt;/api/webhooks/mailshake
           </code>{" "}
@@ -87,9 +87,9 @@ export default async function CampaignsPage(props: {
       )}
 
       {campaigns.length === 0 ? (
-        <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          No campaigns synced yet. The 30-min sync runs automatically; trigger
-          manually with <code className="text-xs">npm run mailshake:sync</code>.
+        <div className="text-muted-foreground rounded-md border border-dashed p-8 text-center text-sm">
+          No campaigns synced yet. The 30-min sync runs automatically; trigger manually with{" "}
+          <code className="text-xs">npm run mailshake:sync</code>.
         </div>
       ) : (
         <div className="rounded-md border">
@@ -119,7 +119,7 @@ export default async function CampaignsPage(props: {
                       {c.title}
                     </Link>
                     {c.sender_email ? (
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="text-muted-foreground text-[11px]">
                         {c.sender_name ? `${c.sender_name} · ` : ""}
                         {c.sender_email}
                       </div>
@@ -141,22 +141,14 @@ export default async function CampaignsPage(props: {
                   <TableCell className="text-right font-semibold tabular-nums">
                     {c.lead_count}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {c.engaged_count}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {c.closed_count}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {c.ignored_count}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {c.unique_school_count}
-                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{c.engaged_count}</TableCell>
+                  <TableCell className="text-right tabular-nums">{c.closed_count}</TableCell>
+                  <TableCell className="text-right tabular-nums">{c.ignored_count}</TableCell>
+                  <TableCell className="text-right tabular-nums">{c.unique_school_count}</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {c.matched_account_count}/{c.lead_count}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
+                  <TableCell className="text-muted-foreground text-xs">
                     {fmtDate(c.mailshake_created_at)}
                   </TableCell>
                   <TableCell>
@@ -165,7 +157,7 @@ export default async function CampaignsPage(props: {
                         href={c.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                        className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-xs"
                       >
                         Mailshake <ExternalLink className="size-3" />
                       </a>
@@ -181,12 +173,10 @@ export default async function CampaignsPage(props: {
       {topSchools.length > 0 && (
         <div className="mt-8">
           <div className="mb-2 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold tracking-tight">
-              Top schools (by recipients)
-            </h2>
-            <p className="text-[11px] text-muted-foreground">
-              {topSchools.length} schools · ranked by total leads in pipeline, ties
-              broken by closed-deal count
+            <h2 className="text-sm font-semibold tracking-tight">Top schools (by recipients)</h2>
+            <p className="text-muted-foreground text-[11px]">
+              {topSchools.length} schools · ranked by total leads in pipeline, ties broken by
+              closed-deal count
             </p>
           </div>
           <div className="rounded-md border">
@@ -212,12 +202,10 @@ export default async function CampaignsPage(props: {
                           {s.school_label}
                         </Link>
                       ) : (
-                        <span className="font-medium text-muted-foreground">
-                          {s.school_label}
-                        </span>
+                        <span className="text-muted-foreground font-medium">{s.school_label}</span>
                       )}
                       {!s.account_id && (
-                        <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
                           unmatched
                         </span>
                       )}
@@ -227,7 +215,7 @@ export default async function CampaignsPage(props: {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{s.closed}</TableCell>
                     <TableCell className="text-right tabular-nums">{s.campaigns}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground text-xs">
                       {fmtDate(s.last_activity_at)}
                     </TableCell>
                   </TableRow>
