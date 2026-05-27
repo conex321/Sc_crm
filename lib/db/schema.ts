@@ -69,6 +69,10 @@ export const users = pgTable("users", {
   // company-wide sync — `activities.user_id` is resolved from the call's
   // `user_id` / `target.id` against this column.
   dialpadUserId: text("dialpad_user_id").unique(),
+  // Rep's Dialpad-assigned phone number (E.164). Used as a fallback owner
+  // signal for historical webhook-ingested calls whose raw payload lacks
+  // user_id/target.id — phone-match against from_number/to_number.
+  dialpadPhone: text("dialpad_phone"),
   role: userRoleEnum("role").notNull().default("rep"),
   isActive: boolean("is_active").notNull().default(true),
   ...auditCols,
