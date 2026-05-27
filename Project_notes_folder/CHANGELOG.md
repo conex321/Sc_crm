@@ -353,3 +353,20 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
     User must add the new redirect URI `https://sc-crm-sand.vercel.app/auth/gmail-callback` (and localhost variant) to the schoolconex-crm OAuth Web client + add gmail.readonly to the OAuth consent screen before any rep clicks Connect Gmail.
 - deploy_status: Vercel preview build in progress at dpl_HVnP6jpztbFixFSBDhipjhyXgz32 (branch feat/mailshake-activation, commit 6815341). NOT alias-promoted to sc-crm-sand yet — promote only after migrations land, otherwise dialpad-sync cron will fail with "column users.dialpad_user_id does not exist".
 - next: After migrations + redirect URI registration, alias-promote dpl_HVnP6jpz... to production, smoke-test `/api/cron/dialpad-sync` for `ownerCounts` field, sign in as Rayan, click Connect Gmail, then hit `/api/cron/gmail-sync` to verify message ingestion.
+
+## 2026-05-27T13:00Z — Claude
+- session: 2026-05-27 Matthew onboarding + phone-fallback attribution
+- decisions_added: [D-037]
+- failures_added: []
+- files_changed: [
+    lib/db/schema.ts (+ users.dialpad_phone),
+    supabase/migrations/0007_users_dialpad_phone.sql (NEW),
+    scripts/create-matthew-user.sql (NEW),
+    scripts/run-matthew-user.mts (NEW),
+    scripts/dialpad-reattribute-by-phone.mts (NEW),
+    scripts/gcp-add-gmail-redirect-uris.mts (NEW — automation script, requires headed Chrome)
+  ]
+- verified: migration 0007 applied prod; run-matthew-user.mts created auth+public.users row d577fdc0-513a-47ea-8012-f44148fac27d; payload reattribute (re-run with Matthew now mapped) updated 9 calls; phone reattribute matched 94, ambiguous 3, unmatched 33; final audit-prod-state shows Matthew=54, Rayan=49, unassigned=33.
+- commit: 03b0a35 on feat/mailshake-activation, pushed to origin.
+- pending: User must register `https://sc-crm-sand.vercel.app/auth/gmail-callback` + `http://localhost:3000/auth/gmail-callback` as authorized redirect URIs on OAuth client 489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n. Internal-mode consent screen auto-permits gmail.readonly — no scope edit needed. Browser automation script `scripts/gcp-add-gmail-redirect-uris.mts` is checked in for future runs but requires permission to drive Chrome over CDP and headed-Chrome sign-in.
+- next: Once redirect URIs land, Rayan signs in at /settings/integrations and clicks Connect Gmail. Tomorrow's 09:00 UTC gmail-sync cron starts pulling his inbox.
