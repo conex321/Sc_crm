@@ -1,9 +1,8 @@
 -- =============================================================================
 -- create-matthew-user.sql
 -- Creates matthew@schoolconex.com in auth.users so the post-signup trigger
--- populates public.users with a stable id. Matthew is auto-promoted to admin
--- only if he's the first user (he won't be — demo + rayan exist). Defaults
--- to 'rep' role; manually elevate to 'admin' afterward via SQL if desired.
+-- populates public.users with a stable id. Matthew is THE CRM admin (D-039);
+-- this script asserts role='admin' on insert AND on every re-run.
 --
 -- Idempotent: safe to re-run. Does NOT create a password — Matthew signs in
 -- via Google SSO. We just need the auth.users row to exist so the trigger
@@ -57,11 +56,14 @@ begin
 
   -- Ensure public.users row exists with the right name (the trigger may have
   -- run with a different display name on a prior pass; idempotent update).
+  -- Matthew is THE admin (D-039) — re-runs re-assert the role.
   insert into public.users (id, full_name, google_email, role)
   values (v_user_id, v_full_name, v_email, 'admin')
   on conflict (id) do update
     set full_name = excluded.full_name,
-        google_email = excluded.google_email;
+        google_email = excluded.google_email,
+        role = 'admin',
+        is_active = true;
 
   -- Seed Dialpad mappings (Matthew's known ids).
   update public.users

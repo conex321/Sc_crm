@@ -5,6 +5,7 @@ import {
   contacts as contactsTable,
   mailshakeCampaigns,
   mailshakeLeads,
+  users as usersTable,
 } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import {
@@ -39,15 +40,42 @@ type MailshakeLeadValues = {
   lastStatusChangeAt: Date | null;
   annotation: string | null;
   assignedToEmail: string | null;
+  assignedUserId: string | null;
   fields: Record<string, unknown>;
   lastSyncedAt: Date;
 };
 
 /**
+ * Resolve the user the sync should own newly inserted Mailshake rows under.
+ * Reads `MAILSHAKE_SYNC_USER_ID` first, then `MAILSHAKE_SYNC_USER_EMAIL`
+ * looked up against `public.users`. Returns null if neither resolves — in
+ * that case new rows are inserted with owner_user_id NULL and an admin can
+ * assign them later.
+ */
+async function resolveSyncOwnerId(): Promise<string | null> {
+  const explicitId = process.env.MAILSHAKE_SYNC_USER_ID?.trim();
+  if (explicitId) return explicitId;
+  const email = process.env.MAILSHAKE_SYNC_USER_EMAIL?.trim().toLowerCase();
+  if (!email) return null;
+  const rows = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(sql`lower(${usersTable.googleEmail}) = ${email}`)
+    .limit(1);
+  return rows[0]?.id ?? null;
+}
+
+/**
  * Upsert one campaign row from a Mailshake list payload.
  * Returns the local DB id.
+ *
+ * `ownerUserId` is set on INSERT only — `onConflictDoUpdate` excludes it so
+ * admin reassignments survive future syncs.
  */
-async function upsertCampaign(c: MailshakeCampaignSummary): Promise<string> {
+async function upsertCampaign(
+  c: MailshakeCampaignSummary,
+  ownerUserId: string | null,
+): Promise<string> {
   const values = {
     mailshakeId: String(c.id),
     title: c.title,
@@ -59,6 +87,7 @@ async function upsertCampaign(c: MailshakeCampaignSummary): Promise<string> {
     url: c.url ?? null,
     mailshakeCreatedAt: c.created ? new Date(c.created) : null,
     lastSyncedAt: new Date(),
+    ownerUserId,
   };
   const [row] = await db
     .insert(mailshakeCampaigns)
@@ -171,6 +200,8 @@ async function upsertLead(
   if (!values.email) {
     return { email: "", matchedAccount: false, matchedContact: false };
   }
+  // `assignedUserId` is set on INSERT only — `onConflictDoUpdate` excludes it
+  // so admin reassignments survive future syncs.
   await db
     .insert(mailshakeLeads)
     .values(values)
@@ -209,6 +240,7 @@ async function upsertRecipient(
   campaignDbId: string,
   campaignMailshakeId: string,
   recipient: MailshakeRecipientRow,
+  assignedUserId: string | null,
   matcher?: LeadMatcher,
 ) {
   const normalized = normalizeMailshakeRecipient(campaignMailshakeId, recipient);
@@ -231,6 +263,7 @@ async function upsertRecipient(
     lastStatusChangeAt: null,
     annotation: null,
     assignedToEmail: null,
+    assignedUserId,
     fields: normalized.fields,
     lastSyncedAt: new Date(),
   });
@@ -240,6 +273,7 @@ async function upsertEngagedLead(
   campaignDbId: string,
   campaignMailshakeId: string,
   lead: MailshakeLeadRow,
+  assignedUserId: string | null,
   matcher?: LeadMatcher,
 ) {
   const email = lead.recipient.emailAddress.trim().toLowerCase();
@@ -261,6 +295,7 @@ async function upsertEngagedLead(
     lastStatusChangeAt: lead.lastStatusChangeDate ? new Date(lead.lastStatusChangeDate) : null,
     annotation: lead.annotation ?? null,
     assignedToEmail: lead.assignedTo?.emailAddress ?? null,
+    assignedUserId,
     fields: lead.recipient.fields ?? {},
     lastSyncedAt: new Date(),
   });
@@ -273,12 +308,20 @@ async function upsertEngagedLead(
 export async function syncCampaign(
   campaign: MailshakeCampaignSummary,
   matcher?: LeadMatcher,
+  ownerUserId: string | null = null,
 ): Promise<{ leadCount: number; matchedAccount: number; matchedContact: number }> {
-  const campaignDbId = await upsertCampaign(campaign);
+  const resolvedOwner = ownerUserId ?? (await resolveSyncOwnerId());
+  const campaignDbId = await upsertCampaign(campaign, resolvedOwner);
   const matchedByEmail = new Map<string, { matchedAccount: boolean; matchedContact: boolean }>();
   const recipients = await listRecipients(campaign.id);
   for (const recipient of recipients) {
-    const result = await upsertRecipient(campaignDbId, String(campaign.id), recipient, matcher);
+    const result = await upsertRecipient(
+      campaignDbId,
+      String(campaign.id),
+      recipient,
+      resolvedOwner,
+      matcher,
+    );
     if (result.email) {
       matchedByEmail.set(result.email, {
         matchedAccount: result.matchedAccount,
@@ -289,7 +332,13 @@ export async function syncCampaign(
 
   const leads = await listLeads(campaign.id);
   for (const lead of leads) {
-    const result = await upsertEngagedLead(campaignDbId, String(campaign.id), lead, matcher);
+    const result = await upsertEngagedLead(
+      campaignDbId,
+      String(campaign.id),
+      lead,
+      resolvedOwner,
+      matcher,
+    );
     if (result.email) {
       matchedByEmail.set(result.email, {
         matchedAccount: result.matchedAccount,
@@ -312,6 +361,7 @@ export async function syncCampaign(
 export async function syncAllCampaigns(opts?: { includeArchived?: boolean }): Promise<SyncResult> {
   const includeArchived = opts?.includeArchived ?? false;
   const campaigns = await listCampaigns();
+  const ownerUserId = await resolveSyncOwnerId();
 
   const result: SyncResult = {
     campaigns: { upserted: 0 },
@@ -320,7 +370,7 @@ export async function syncAllCampaigns(opts?: { includeArchived?: boolean }): Pr
   };
 
   for (const c of campaigns) {
-    await upsertCampaign(c);
+    await upsertCampaign(c, ownerUserId);
     result.campaigns.upserted++;
   }
 
@@ -331,7 +381,11 @@ export async function syncAllCampaigns(opts?: { includeArchived?: boolean }): Pr
     try {
       // eslint-disable-next-line no-console
       console.error(`[mailshake-sync] ${c.id} ${c.title.slice(0, 60)}…`);
-      const { leadCount, matchedAccount, matchedContact } = await syncCampaign(c, matcher);
+      const { leadCount, matchedAccount, matchedContact } = await syncCampaign(
+        c,
+        matcher,
+        ownerUserId,
+      );
       result.leads.upserted += leadCount;
       result.leads.matchedAccount += matchedAccount;
       result.leads.matchedContact += matchedContact;

@@ -11,6 +11,7 @@ import {
   Activity as ActivityIcon,
 } from "lucide-react";
 import type { TimelineActivity } from "@/lib/crm/activities";
+import { AttachToAccountDialog } from "@/components/crm/attach-to-account-dialog";
 
 const channelMeta: Record<
   TimelineActivity["channel"],
@@ -27,7 +28,13 @@ const channelMeta: Record<
   payment: { label: "Payment", icon: CreditCard },
 };
 
-export function ActivityTimeline({ activities }: { activities: TimelineActivity[] }) {
+export function ActivityTimeline({
+  activities,
+  allowAttach = false,
+}: {
+  activities: TimelineActivity[];
+  allowAttach?: boolean;
+}) {
   if (activities.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">
@@ -131,6 +138,11 @@ export function ActivityTimeline({ activities }: { activities: TimelineActivity[
                   ) : (
                     <span>No due date</span>
                   )}
+                </div>
+              )}
+              {allowAttach && !a.account_id && (
+                <div className="mt-2">
+                  <AttachToAccountDialog activityId={a.id} />
                 </div>
               )}
             </div>

@@ -363,6 +363,7 @@ export const mailshakeCampaigns = pgTable("mailshake_campaigns", {
   url: text("url"),
   mailshakeCreatedAt: timestamp("mailshake_created_at", { withTimezone: true }),
   lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   ...auditCols,
 });
 
@@ -389,6 +390,7 @@ export const mailshakeLeads = pgTable(
     lastStatusChangeAt: timestamp("last_status_change_at", { withTimezone: true }),
     annotation: text("annotation"),
     assignedToEmail: text("assigned_to_email"),
+    assignedUserId: uuid("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
     fields: jsonb("fields").notNull().default({}),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
     ...auditCols,

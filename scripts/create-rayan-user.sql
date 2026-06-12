@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Create a sign-in account for rayan@schoolconex.com so we can test as him.
--- Idempotent. Promotes Rayan to admin so he sees every page.
+-- Idempotent. Rayan is a REP (D-039) — per-rep RLS scopes him to his own
+-- synced data. Matthew (matthew@schoolconex.com) is the admin.
 --
 --   email    : rayan@schoolconex.com
 --   password : Test1234!
@@ -20,7 +21,7 @@ begin
            email_confirmed_at = coalesce(email_confirmed_at, now()),
            updated_at = now()
      where id = v_user_id;
-    update public.users set role = 'admin', is_active = true where id = v_user_id;
+    update public.users set role = 'rep', is_active = true where id = v_user_id;
     return;
   end if;
 
@@ -80,9 +81,9 @@ begin
     now()
   );
 
-  -- Promote Rayan to admin (the first-user-is-admin trigger already fired —
-  -- we override its 'rep' default since demo@schoolconex.com is the first user)
-  update public.users set role = 'admin', is_active = true where id = v_user_id;
+  -- Rayan is a rep (D-039): the trigger's 'rep' default is correct, just make
+  -- sure the row is active.
+  update public.users set role = 'rep', is_active = true where id = v_user_id;
 
   raise notice 'created rayan@schoolconex.com with id %', v_user_id;
 end $$;

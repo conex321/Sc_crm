@@ -1,0 +1,220 @@
+## Architecture & Key Decisions
+
+### D-001 — Integration philosophy: Hybrid (sync + selective send) — 2026-05-06
+**Decision:** CRM ingests events from all five vendors (Dialpad, WhatsApp, Stripe, Mailshake, Google Drive) and adds outbound only for high-value actions (generate contract, log call note, push to Mailshake campaign, trigger Stripe invoice). Reps continue working in Dialpad app, WhatsApp, and Mailshake natively.
+**Why:** Lightest path to a unified per-account history without rebuilding inboxes/dialers. Preserves rep workflows.
+**Alternatives considered:** Read-only sync (rejected — reps still tab between tools, less value); full source-of-truth control plane with click-to-call + embedded inboxes (rejected — months of extra build, partial duplication of vendor functionality).
+
+### D-002 — Drive-as-source-of-truth for contracts — 2026-05-06
+**Decision:** Contracts stay in Google Drive. CRM stores `documents` rows with `drive_file_id`, `drive_link`, mime, status, and metadata. No PDF/DOCX bytes copied into Supabase Storage. Supabase Storage used only for ad-hoc non-contract uploads (avatars, screenshots in notes).
+**Why:** Avoids dual-source-of-truth and reconciliation bugs. Leverages existing Drive folder structure.
+**Alternatives considered:** CRM-owned in Supabase Storage with Drive backup (rejected — dual maintenance overhead); two-way mirror (rejected — sync bugs not worth the UX gain).
+
+### D-003 — Multiple configurable pipelines per service line; multi-opp per account — 2026-05-06
+**Decision:** Pipelines are admin-editable, one per service line (Principal Service, LMS, Courses initially). One account (a school) can have multiple open opportunities simultaneously, each in its own pipeline.
+**Why:** Service lines have meaningfully different sales motions; schools regularly buy more than one thing.
+**Alternatives considered:** Single universal pipeline + service-type tag (rejected — stages forced into one shape); single-opp-per-account (rejected — doesn't match how schools buy).
+
+### D-004 — Application stack: Next.js 15 + Supabase + Vercel + Inngest — 2026-05-06
+**Decision:**
+- Frontend + server: Next.js 15 (App Router, Server Components, Server Actions, Route Handlers for webhooks)
+- DB / Auth / Storage: Supabase (Postgres + Auth + Storage)
+- Background jobs: Inngest (managed)
+- Hosting: Vercel for the web app
+- UI primitives: Tailwind + shadcn/ui
+
+**Why:** One codebase covers UI + webhooks + cron handlers. Supabase already in use. All managed services — no infra team needed. Inngest gives retries / scheduled syncs / fan-out without rolling own queue.
+**Alternatives considered:** Remix or SvelteKit (no functional advantage); React SPA + dedicated backend (overkill for an internal tool); Retool/Budibase low-code (lower ceiling, not chosen).
+
+### D-005 — Catalog model: products + packages + line-item quotes — 2026-05-06
+**Decision:** Three tables — `products` (the 70+ courses + service tiers), `packages` (named bundles, joined to products via `package_items`), `opportunity_line_items` (quote rows referencing product or package, with quantity, unit_price override, discount_pct).
+**Why:** Covers ~95% of real B2B selling without becoming a CPQ project.
+**Alternatives considered:** Flat SKU list (rejected — no overrides, every package = manual data entry); full CPQ with rules engine + approval workflows (rejected — overkill).
+
+### D-006 — MVP v1 scope: Foundation + Drive + Dialpad — 2026-05-06
+**Decision:** v1 ships with auth, accounts/contacts/opportunities, configurable pipelines, account-360 page with timeline, manual notes/tasks, Google Drive integration (attach + generate-from-template + status reconciliation), and Dialpad call-log ingestion. Defer: WhatsApp, Mailshake, Stripe, full catalog/quoting.
+**Why:** Reps need daily-usable in ~6 weeks; pipelines + Drive contracts + Dialpad calls is the smallest combination that beats the current spreadsheet workflow.
+**Alternatives considered:** Foundation only (rejected — no time saved, low adoption); foundation + all integrations end-to-end (rejected — ~12-16 weeks before any feedback); foundation + Mailshake + Stripe (rejected — Dialpad/Drive higher daily-touch value).
+
+### D-007 — Auth: Google Workspace SSO via Supabase Auth, domain-restricted — 2026-05-06
+**Decision:** Supabase Auth + Google OAuth, restricted to the company domain via the `hd` parameter and a server-side email-domain check at sign-in. No password auth, no signup flow.
+**Why:** Reps already have Google accounts; one-click login; no separate password management.
+**Alternatives considered:** Email/password (rejected — extra credential to manage); magic link (acceptable fallback if SSO has a hiccup, not primary).
+
+### D-008 — Three-tier RBAC enforced by Postgres RLS — 2026-05-06
+**Decision:** Roles `rep` / `manager` / `admin`. Reps CRUD their own records, read everyone's. Managers reassign + edit any record. Admins additionally edit catalog, pipelines, user roles, integration credentials. Enforcement is Postgres RLS policies on every table; Server Actions re-check role for writes (defense in depth).
+**Why:** RLS makes authorization a database guarantee — can't be bypassed by a buggy route.
+**Alternatives considered:** App-only authorization (rejected — fragile); fine-grained ACLs per record (rejected — premature for small team).
+
+### D-009 — Drive integration uses dual auth (per-user OAuth + service account) — 2026-05-06
+**Decision:** Per-user OAuth with `drive.file` scope (least privilege — only files the app creates or the user explicitly opens via Drive Picker) for rep-attached files and rep-owned generated contracts. Service account with shared access to "CRM Templates" and "CRM Generated" folders for system-level operations (template reads, periodic status reconciliation).
+**Why:** Files generated by reps must appear in their personal Drive and use their identity for sharing. System operations need a stable, user-independent identity. `drive.file` is far less invasive than `drive.readonly`.
+**Alternatives considered:** Service account only (rejected — files appear orphaned to the rep); per-user only (rejected — no stable identity for cron jobs); broad `drive.readonly` scope (rejected — security overreach).
+
+### D-010 — Webhook ingestion: raw event log + idempotent parsing — 2026-05-06
+**Decision:** Every inbound webhook payload is signature-verified, then inserted into `integration_events_raw` (append-only, unique index on `(provider, event_id)`), then an Inngest job is enqueued to parse + write typed activity rows. The webhook handler returns 200 fast.
+**Why:** Replay capability when a parser bug eats data. Idempotency on dedup key. Failure isolation via Inngest retries + dead-letter view.
+**Alternatives considered:** Direct synchronous parsing in webhook handler (rejected — webhook timeouts + retry storms on transient failures); skip the raw log (rejected — no replay).
+
+### D-011 — Polymorphic activity timeline (parent + per-channel child tables) — 2026-05-06
+**Decision:** Single `activities` table holds common fields (account_id, contact_id, opportunity_id, channel, direction, occurred_at, summary). Per-channel child tables (`calls`, `messages`, `email_events`, `notes`, `tasks`, `contract_events`, `payments`) extend with channel-specific fields, joined 1:1 via `activity_id`.
+**Why:** Type-safe queries, RLS clarity, easy to add new channels.
+**Alternatives considered:** Single `activities` table with JSON payload (rejected — no schema enforcement, harder to index); fully-separate per-channel tables with no parent (rejected — UNION queries get messy for the timeline view).
+
+### D-012 — WhatsApp ingestion gated on Business API decision — 2026-05-06
+**Decision:** Open question for v2/v3 planning: WhatsApp ingestion only works if the team is on WhatsApp Business API (Meta Cloud API or a BSP like Twilio). Personal WhatsApp / standalone WhatsApp Business app cannot be ingested via API.
+**Why:** Architectural blocker for that integration. Surfacing now so it's resolved before Phase 6.
+**Alternatives if Business API is not viable:** Skip WhatsApp ingestion entirely, accept manual notes; revisit shared-device approaches (fragile, not recommended).
+
+### D-013 — Phase 1 execution lock-in — 2026-05-06
+**Decision:** No Drive, Dialpad, Stripe, Mailshake, WhatsApp, quoting, or AI work until Phase 1 ships and is stable in real use (= two reps using it daily for a full week without blocker bugs). Phase 1 tables only: `users`, `accounts`, `contacts`, `pipelines`, `pipeline_stages`, `opportunities`, `activities`, `notes`, `tasks`, `audit_log`.
+**Why:** Prevents scope creep — biggest risk now is mixing in integrations early and ending up half-built everywhere instead of usable anywhere.
+**Alternatives considered:** Build Drive in parallel with foundation (rejected — splits attention, slows time-to-first-rep-using-it).
+
+### D-014 — `activities.account_id` nullable + Unmatched inbox — 2026-05-06
+**Decision:** `activities.account_id` is nullable. Inbound events from integrations (Phase 3+) whose contact lookup fails are inserted with `account_id = NULL` and surfaced in an explicit "Unmatched inbox" view where a rep can manually associate them to an account.
+**Why:** Inbound calls/messages from unknown numbers can't be lost, but also shouldn't fail the webhook handler. Putting them in an inbox is the standard CRM pattern.
+**Alternatives considered:** Drop unmatched events (rejected — data loss); auto-create a placeholder contact (rejected — pollutes contacts).
+
+### D-015 — Standardized audit columns — 2026-05-06
+**Decision:** Every table includes: `created_at`, `updated_at` (touched by trigger), `created_by` (uuid → users, nullable for system inserts), `updated_by` (uuid → users, nullable). Customer-facing entities (`accounts`, `contacts`, `opportunities`, `documents`) additionally include `deleted_at` for soft delete (RLS predicate hides soft-deleted rows from `rep` and `manager`; `admin` can see them).
+**Why:** Consistency across tables, audit trail without a separate event-source table, soft delete prevents accidental data loss.
+**Alternatives considered:** Audit-log-only (rejected — joining for "who last edited this row" is annoying); no audit columns (rejected — no accountability).
+
+### D-017 — Phase 1 lock-in (D-013) relaxed by user instruction — 2026-05-06
+**Decision:** Continue past Phase 1 into Phases 2-6 in this same session. User explicitly said "continue to the rest of the phases" after Phase 1 was committed. D-013 ("no Phase 2 work until Phase 1 stable in real use") was overridden by direct user request.
+**Why:** User wants the full system code-complete in one push; vendor credentials will land asynchronously. Risk accepted: Phase 1 hasn't had its full week of two-rep daily use, but no production data is at stake.
+**How to apply:** Each phase 2-6 is delivered as code-complete + DB schema + webhook endpoints. Activation requires vendor credentials + webhook URL registration on the vendor side. None of the integrations will fire without real credentials.
+
+### D-018 — Activity inserts from integrations bypass RLS via Drizzle — 2026-05-06
+**Decision:** Webhook handlers and Inngest job code use the server-only Drizzle client (DATABASE_URL = postgres role) to insert activities + child rows. This bypasses RLS, which is correct because webhooks have already been signature-verified and the system has no user identity to enforce against. App-code paths (Server Actions called from UI) still go through Supabase server client → RLS-enforced.
+**Why:** RLS predicates require auth.uid(); webhook context has no user, and we don't want to weaken RLS to "allow anonymous inserts on activities" (would be a security regression).
+**How to apply:** Use `recordActivity()` from `lib/integrations/record-activity.ts` for any future integration that needs to write activities. Do NOT call it from UI Server Actions.
+
+### D-016 — UI direction: sidebar-first compact CRM/dashboard — 2026-05-06
+**Decision:** Sidebar-first navigation (collapsible, primary entities: Accounts, Opportunities, Settings). Top utility bar for global search, quick-create, user menu. Compact typography (small base font, dense tables, low-padding cards). CRM/dashboard information density, not a marketing-style layout. shadcn/ui components used with reduced paddings.
+**Why:** Reps need information density. Marketing-style large-padding layouts waste screen real estate when scanning hundreds of records.
+**Alternatives considered:** Top-nav-only (rejected — sidebar communicates entity hierarchy better); standard shadcn defaults (rejected — too airy for a CRM).
+
+### D-019 — Dialpad activated via poll-sync, not webhook — 2026-05-06
+**Decision:** For local/dev (and as primary path until production webhook URL is registered), Dialpad call ingestion runs via Inngest cron `dialpad-sync-rayan` (`*/10 min`) hitting `GET /api/v2/call?user_id=...&started_after=<epoch_ms>&limit=50`. Watermark = max(`received_at`) on `integration_events_raw` minus 60s for clock skew. The webhook handler at `/api/webhooks/dialpad` continues to exist and remains idempotent — both paths share the same `integration_events_raw` dedup index on `(provider, event_id)`.
+**Why:** Webhooks need a public URL (ngrok / deployed). Polling works against any environment. Dialpad's `/call` endpoint requires a company-admin API key (not user-tier — see F-005 / earlier 401 explorations).
+**How to apply:** In `.env.local`, set `DIALPAD_API_KEY` to a company-admin key (not a personal-token JWT). Set `DIALPAD_FILTER_USER_ID` (currently `6598548464648192` for Rayan).
+**Constraints:** Dialpad caps `limit` at 50 per page (we paginate via cursor). Duration field is in **milliseconds** (not seconds) — convert via `Math.round(c.duration / 1000)` before storing in `calls.duration_seconds` (smallint). Recording URL lives at `recording_details[0].url`, not `recording_url[0]`.
+
+### D-020 — Internal calls (Workspace ↔ Workspace) tagged but still ingested — 2026-05-06
+**Decision:** When a Dialpad call's `contact.email` ends with `@schoolconex.com`, mark the activity summary with `· internal` suffix and skip phone-to-contact matching (the other party is a coworker, not a CRM contact). Still ingest the call so the timeline + audit trail is complete.
+**Why:** Rayan ↔ Matthew calls were polluting the unmatched inbox + contact-match attempts. Internal calls don't belong on a customer account anyway.
+**How to apply:** Filter logic in `inngest/functions/dialpad-sync-rayan.ts` and `scripts/dialpad-backfill.mts`. The `· internal` label is in the activity summary; UI can suppress these later if desired.
+
+### D-021 — Demo user created via direct SQL into auth.users — 2026-05-06
+**Decision:** For local testing without configuring Supabase's Google provider, create a sign-in user via direct INSERT into `auth.users` (with `crypt(password, gen_salt('bf'))` and `email_confirmed_at = now()`) plus a matching `auth.identities` row with `provider='email'`. The post-signup trigger fires and creates the `public.users` row; first user gets role `admin`.
+**Demo creds:** `demo@schoolconex.com` / `Test1234!`. Idempotent SQL at `scripts/create-demo-user.sql` + tsx wrapper at `scripts/run-demo-user.mts`.
+**Why:** Email/password fallback on `/login` (also added) lets us test full pages without external Google OAuth setup. Once the user configures Supabase's Google provider, real Google sign-in works alongside the form.
+**How to apply:** Run `npx tsx scripts/run-demo-user.mts` to create or refresh. NEVER do this in production — the password hash sits in DB.
+
+### D-022 — Email/password sign-in form added alongside Google SSO — 2026-05-06
+**Decision:** `/login` page now shows email + password fields above the Google button, separated by an "or" divider. Server Action `signInWithEmailPassword` validates domain (`@schoolconex.com`), calls `supabase.auth.signInWithPassword`, redirects on error to `/login?error=credentials|missing|domain`.
+**Why:** Local development testing without Google provider configured. Useful as a fallback for production if SSO breaks. Does NOT bypass any RLS / role checks — same auth surface.
+**How to apply:** Disable in production by removing the form (or gate behind `NODE_ENV !== 'production'`) once Supabase Google provider is configured. Or keep both, since they share identity.
+
+### D-023 — Browser automation via Playwright + persistent Chrome over CDP — 2026-05-06
+**Decision:** For tasks that need GCP / Drive / dashboard interaction, launch a long-running headed Chromium with the user's installed Chrome (`channel: "chrome"`) using a persistent profile dir at `.playwright-profile/` and `--remote-debugging-port=9222`. Many small one-shot scripts under `scripts/gcp-*.mts` connect via `chromium.connectOverCDP("http://127.0.0.1:9222")`, do an action, save a screenshot to `.playwright-shots/`, and disconnect.
+**Why:** Single source of session state (cookies, login). User can manually intervene in the same window. Each script stays small + composable.
+**Constraints:**
+  - Downloads triggered via JS click sometimes don't fire `page.waitForEvent("download")` over CDP — use a polling-Downloads-folder fallback OR install the listener BEFORE the click. Service-account JSON download worked with the BEFORE-click listener.
+  - Material radio buttons need `radio.check({ force: true })` (Playwright's role-aware path) — DOM `.click()` triggers visual but not Material's binding.
+  - "Email addresses" chip-input style fields: walk `mat-form-field` → label match → child `input` and `fill()` via Playwright (not `keyboard.type`) for reliable input event dispatch.
+  - GCP "Create credentials" / chip-input shows a global Search bar combobox at the same role; SCOPE selectors to the form region or you'll click search.
+
+### D-024 — Drive integration project: schoolconex-crm under SchoolConex Workspace, NOT personal Gmail — 2026-05-06
+**Decision:** GCP project for the Drive integration is `schoolconex-crm` (project number `489266381443`), created under the **schoolconex.com** organization while signed in as **matthew@schoolconex.com**. Earlier work was accidentally done under matthewsefati@gmail.com (project `gmail-mcp-personal-495520`); user explicitly course-corrected mid-session and that work was discarded (see F-003).
+**Why:** Drive integration is a SchoolConex business resource, not personal. Living under the company Workspace org gives admin oversight, billing, and the ability to use Internal-mode OAuth consent (no app verification needed for `@schoolconex.com` users).
+**How to apply:** All Google credentials in `.env.local` reference this project. If anything mentions `gmail-mcp-personal`, it's stale.
+
+### D-025 — OAuth consent screen: Internal user type — 2026-05-06
+**Decision:** Configured the OAuth consent screen for `schoolconex-crm` as **Internal** user type. Internal means only `@schoolconex.com` Workspace accounts can authenticate; no test-user list maintenance, no app verification by Google needed.
+**Why:** Workspace org membership IS the auth gate. Avoids the test-user-cap-100 limit and consent-screen verification flow. Keeps onboarding one-click for any rep on the domain.
+**How to apply:** If we ever want non-`@schoolconex.com` users to authenticate (external clients, partners), we'd need to switch to External + go through verification. Don't.
+
+### D-026 — Drive folders owned by service account; Workspace user shared as writer — 2026-05-06
+**Decision:** Both `CRM Templates` and `CRM Generated` folders were created via the service account (programmatically, via Drive API). Each is shared with `matthew@schoolconex.com` as `writer`. They appear in his Drive under "Shared with me".
+**Why:** Folders don't consume storage, so SA-owned folders don't trigger the storage-quota issue (D-026 caveat / F-004). Sharing as writer means Matthew can drop templates in.
+**Caveat:** Files INSIDE these folders, when created by the SA, charge against the SA's storage quota — which is 0. So the "generate contract from template" flow (which copies a Doc) currently fails with `storageQuotaExceeded`. See F-004 for the two production fix options (Shared Drive OR Domain-Wide Delegation).
+**Status:** SUPERSEDED by D-027. The pre-Shared-Drive folder IDs are commented out in `.env.local` for reference.
+
+### D-027 — F-005 fix: SchoolConex CRM Shared Drive hosts both folders — 2026-05-07
+**Decision:** Created a new Shared Drive named "SchoolConex CRM" (id `0AFnM-2HvmqO2Uk9PVA`) under the schoolconex.com org via the Drive UI as `matthew@schoolconex.com`. Added the SA `schoolconex-crm-drive@schoolconex-crm.iam.gserviceaccount.com` as `organizer` (Content Manager) on the Shared Drive via Drive REST API `permissions.create` with `supportsAllDrives:true`, authenticated through a one-shot OAuth loopback flow (`access_type=online`, no refresh token persisted). New folders created inside the Shared Drive: `CRM Templates` (`1T7ItO_S8O4sGsnftj3kWz04L1R0fJQPo`) + `CRM Generated` (`1NR8wyn013tPE2NLWl4ke5OSc4UDJiXZj`). `.env.local` updated; legacy My-Drive folder IDs preserved as `*_LEGACY` comments. Selected Option A from F-005 because (a) Shared Drive needs zero ongoing impersonation gymnastics, (b) doesn't require admin.google.com domain-wide-delegation config, and (c) survives an SA rotation cleanly.
+**Why:** Files in a Shared Drive are owned by the Drive itself, not by the creating principal — so the SA's 0 personal storage quota never matters. This unblocks the "generate contract from template" flow (and any future SA-as-writer pattern).
+**How to apply (for future agents):**
+- All Drive API calls that touch CRM Templates / CRM Generated (or any descendant) MUST pass `supportsAllDrives: true` (and for `files.list`, additionally `includeItemsFromAllDrives: true`, `corpora: "drive"`, `driveId: GOOGLE_DRIVE_SHARED_DRIVE_ID`). See `scripts/drive-smoke.mts` and `scripts/drive-create-folders-in-sd.mts` for the canonical invocation.
+- When `lib/integrations/google/drive.ts` (or wherever the contract-generation flow lives) is implemented, set `supportsAllDrives: true` everywhere, AND when copying templates use the Shared Drive folder as the parent.
+- The OAuth Web client at `489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n` now has TWO authorized redirect URIs: `http://localhost:3000/auth/google-drive-callback` (for Supabase / app-level Drive OAuth — was pre-existing) and `http://localhost:53682/oauth/callback` (for the loopback admin-task flow). Both are needed; don't delete either.
+
+### D-028 — Smoke scripts track current redirects + Rayan Dialpad email fields — 2026-05-07
+**Decision:** Keep the validation scripts aligned with current runtime behavior: authenticated `/login` is expected to redirect to `/accounts`, `/settings` redirects to `/settings/users`, and `/inbox` cards currently render call summaries/durations/internal tags rather than raw phone numbers. `scripts/dialpad-list-calls.mts` now prints `target_email`, `target_phone`, `contact_email`, and `contact_phone` so Rayan targeting can be proven from Dialpad payloads without inspecting the full record.
+**Why:** The app behavior was correct but smoke scripts were failing on stale expectations, which hid the useful validation signal. The Dialpad list script now makes `target.email=rayan@schoolconex.com` visible in compact output.
+
+### D-029 — External integration callbacks bypass app auth — 2026-05-08
+**Decision:** `PUBLIC_PATHS` in `lib/supabase/middleware.ts` includes `/api/webhooks` and `/api/inngest`. User-facing app pages and app-owned APIs stay protected; third-party callback endpoints do their own signature/payload validation.
+**Why:** Full verification showed unauthenticated webhook POSTs were redirected to `/login` before reaching the route handlers. Dialpad/Mailshake/Stripe/Twilio and Inngest cannot supply a Supabase session cookie, so middleware auth must not gate those callback surfaces.
+
+### D-031 — Mailshake polling = lead pipeline only; events via webhook — 2026-05-09
+**Decision:** Activate Mailshake in two layers. Layer 1 (live now): a 30-min Inngest cron `mailshake-sync-campaigns` calls `GET /campaigns/list` + `GET /leads/list?campaignID=<id>` per non-archived campaign and upserts into `mailshake_campaigns` and `mailshake_leads`. This gives the lead-pipeline status per recipient (`open` / `closed` / `ignored`). Layer 2 (pending webhook setup in Mailshake): real-time per-event firehose (sent / opened / clicked / replied / bounced incl. reply body) flows via `/api/webhooks/mailshake` → `email_events` → activity timeline. UI surfaces Layer 1 in `/campaigns` + `/campaigns/[id]` + the Campaigns tab on account detail, with a banner explaining Layer 2 activation.
+**Why:** Mailshake's REST API does not expose per-event endpoints (probed `/sentEmails`, `/opens`, `/clicks`, `/replies`, `/messages` — all 404). Polling can only reflect the lead-pipeline status. Webhooks are the only path for actual event tracking. The handler already exists, so activation is a one-time URL registration in the Mailshake dashboard.
+**How to apply:** Run `npm run mailshake:sync` to manually trigger Layer 1. Register `https://<deployed-host>/api/webhooks/mailshake` in Mailshake → Account → Webhooks for events `sent`, `open`, `click`, `reply`, `bounce`, then set `MAILSHAKE_WEBHOOK_SECRET` in env. Use `tsx --conditions=react-server` for any tsx script that imports the libs that pull `server-only` (the `react-server` condition resolves the package to its no-op `empty.js`).
+
+### D-033 — Auto-import contacts from Mailshake recipients — 2026-05-22
+**Decision:** Companion to D-032. For every `mailshake_leads` row with a matched `account_id` and an email, auto-create a CRM contact with `first_name`/`last_name` from `fields.first`/`fields.last` (fall back to splitting `full_name`), `email` from the lead, `phone` from `fields.phoneNumber` (normalized E.164, defaulting US +1 for 10-digit numbers), `role` from `fields.title`, `external_ids = { mailshake_lead_id }`. Update `mailshake_leads.contact_id` to link back. Wired as `npm run mailshake:import-contacts` (with `--dry`). First run: 295 contacts created (225 with normalized phones). Idempotent (dedup on `(account_id, lower(email))`). Uses raw `postgres` not Drizzle — avoids the `--conditions=react-server` complication.
+**Why:** Without contacts, the Dialpad call matcher (`matchPhoneToContact`) has nothing to match against. D-032 created the schools but left them empty — calls to/from real recipients all landed in the Unmatched Inbox even when Mailshake already had their phone. After this fix, the phone matcher correctly links calls to accounts. Proven: 1 Baig Academy call (Javed Faruqui, 647-268-3320) matched immediately on first rematch run.
+**How to apply:** Run after `mailshake:import-accounts` whenever new schools/recipients land. Then `npm run dialpad:rematch-calls` to retroactively link historical calls. Reversible: `delete from contacts where external_ids ? 'mailshake_lead_id'`. Cron does NOT yet run this (open question #26) — operator-triggered for now.
+
+### D-037 — Matthew Rubio onboarded as CRM admin; phone-fallback attribution for legacy calls — 2026-05-27
+**Decision:** Created `matthew@schoolconex.com` as a CRM user (admin role, id `d577fdc0-513a-47ea-8012-f44148fac27d`) via the auth.users INSERT pattern (no password — Google SSO). Mapped his Dialpad ids: `users.dialpad_user_id='5502522061422592'`, `users.dialpad_phone='+16474956991'`. Added `users.dialpad_phone text` column (migration 0007) so historical webhook-ingested calls — whose raw payload lacks `user_id`/`target.id` — can be attributed by matching `calls.from_number`/`calls.to_number` against the rep's phone (`scripts/dialpad-reattribute-by-phone.mts`, last-7-digit fallback).
+**Why:** The first reattribute pass (D-035) only covered calls with proper payload owner ids — about 7 of 134 historical calls. The remaining 127 were old webhook-ingested rows whose payloads use a different shape. Phone matching is the only reliable signal left for those, and Matthew is the only other rep currently making calls.
+**Outcome:** Historical 136 calls → Matthew 54 + Rayan 49 + 33 unassigned (external-to-external, no rep number on either side). Ongoing cron continues to use the payload-owner path for new calls.
+**How to apply:** Migration 0007 + `scripts/run-matthew-user.mts` + `scripts/dialpad-reattribute-by-phone.mts`. To add another rep later: insert their auth user, look up their Dialpad ids via `npm run dialpad:lookup-user <email>`, `update users set dialpad_user_id='…', dialpad_phone='…' where google_email='…'`, then re-run the phone reattribute to retroactively claim their historical calls.
+
+### D-035 — Per-rep Dialpad attribution via `users.dialpad_user_id` — 2026-05-26
+**Decision:** Add a `dialpad_user_id text` column on `public.users` (unique partial index). Every Dialpad call's `activities.user_id` is resolved from the call payload's `user_id` (outbound) or `target.id` (inbound), looked up against `users.dialpad_user_id`. The env-pinned `DIALPAD_FILTER_USER_EMAIL` is now a fallback only — used when the call has no rep id, or that id has no CRM mapping. Migration 0005 seeds Rayan's mapping (`6598548464648192`).
+**Why:** Before this change, the cron stamped `activities.user_id` with whichever single user `DIALPAD_FILTER_USER_EMAIL` pointed at — meaning 103 of 134 calls were all credited to Rayan even though some were Matthew's. Querying "calls per rep this week" was impossible. The fix is small: one column + one lookup, mirrors the same shape we already use for Mailshake sender mapping.
+**How to apply:** Apply migration 0005. To add a new rep: `update users set dialpad_user_id = '<dpid>' where google_email = '<email>'`. Find a rep's Dialpad id via `npm run dialpad:lookup-user <email>`. Existing call rows are re-attributed by `npx tsx scripts/dialpad-reattribute-calls.mts` (idempotent — re-reads each call's raw payload from `integration_events_raw` and rewrites `activities.user_id`).
+**Alternatives considered:** Per-rep webhook subscriptions (rejected — Dialpad webhooks are workspace-level, not per-user); a sidecar `dialpad_user_mapping` table (rejected — one column on `users` is simpler since the mapping is always 1:1).
+
+### D-036 — Gmail mailbox sync uses per-user OAuth (closes F-006) — 2026-05-26
+**Decision:** Each rep grants `gmail.readonly` via the existing `schoolconex-crm` OAuth Web client. Tokens are persisted in the existing `integration_credentials` table keyed `(user_id, provider='google_gmail')`. The daily cron `/api/cron/gmail-sync` (Vercel cron, 09:00 UTC) iterates every connected rep, pulls messages since their per-rep watermark, classifies each thread's direction relative to the rep's address, matches external participants to CRM contacts via the existing `matchEmailToContact`, and persists headers/body into the new `email_messages` table (1:1 child of `activities`, mirrors the `calls` / `messages` pattern from D-011).
+**Why over DWD:** Workspace Domain-Wide Delegation needs admin.google.com config + a Google verification cycle for sensitive scopes. Per-user OAuth uses the existing Internal-mode consent screen (D-025) — any `@schoolconex.com` account self-serves in ~30s. The OAuth client + `integration_credentials` table already exist for Drive; same shape extends cleanly. F-006 service-account impersonation path is abandoned.
+**How to apply:**
+- Register `https://sc-crm-sand.vercel.app/auth/gmail-callback` (and `http://localhost:3000/auth/gmail-callback` for dev) as authorized redirect URIs on OAuth client `489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n`.
+- Add `https://www.googleapis.com/auth/gmail.readonly` to the consent screen scopes.
+- Each rep: sign in → `/settings/integrations` → Connect Gmail.
+**Schema decision:** New `email_messages` table because Gmail messages have full headers + body that don't fit `email_events` (Mailshake-event-shaped). Internal-only threads (every participant `@schoolconex.com`) are stored but skip contact-matching and get the `· internal` summary suffix — mirrors Dialpad D-020.
+
+### D-034 — Mailshake recipients are canonical; Dialpad sync is company-wide — 2026-05-23
+**Decision:** Treat Mailshake `/recipients/list` as the canonical campaign membership feed and overlay `/leads/list` status only for recipients that entered the Mailshake lead pipeline. The `mailshake_leads` table now stores both `status='recipient'` and engaged lead statuses. The Mailshake cron runs the auto-pipeline automatically so accounts/contacts stay populated. Dialpad polling, backfill, and webhook processing are company-wide by default; `DIALPAD_SYNC_SCOPE=user` is the explicit legacy filter.
+**Why:** The prior implementation synced 305 engaged Mailshake leads while missing 2,678 silent recipient emails, leaving the CRM underpopulated. Dialpad was also pinned to Rayan by default, so non-Rayan company calls/webhooks would be skipped even with a company-admin API key.
+**How to apply:** Run `npm run mailshake:sync` to sync campaigns/recipients and run the auto-pipeline. Run `npm run dialpad:backfill -- 30` for a company-wide 30-day call replay. Current 2026-05-23 DB state: 3,095 Mailshake recipient rows, 3,060 account/contact matches; 57/57 live 30-day Dialpad company calls present, 0 missing.
+
+### D-032 — Auto-import schools from Mailshake `recipient.fields.account` — 2026-05-09
+**Decision:** When a lead row's `recipient.fields.account` (Mailshake's school-name field) doesn't match any CRM account, auto-create the account with `name = trim(fields.account)`, `type = 'school'`, `source = 'mailshake'`, then re-match leads. Idempotent (case-insensitive name dedup against existing accounts). Wired as `npm run mailshake:import-accounts` (with `--dry` for preview). First run created 274 accounts, lifted match rate from 0/305 to 301/305 (98.7%).
+**Why:** Mailshake recipients are pre-existing in Mailshake but the CRM started empty. Manually creating 274 schools is friction; auto-import makes the per-school view immediately useful.
+**How to apply:** Run after every meaningful Mailshake sync that introduces new schools. Reversible: `delete from public.accounts where source='mailshake' and not exists (select 1 from contacts c where c.account_id = accounts.id)`.
+
+### D-030 — Local Inngest verification uses `INNGEST_DEV=1` — 2026-05-08
+**Decision:** Added `server-only` as an explicit dependency and set `INNGEST_DEV=1` in `.env.local` for local verification. `.env.example` documents that production must unset `INNGEST_DEV` and use `INNGEST_EVENT_KEY` / `INNGEST_SIGNING_KEY`.
+**Why:** `GET /api/inngest` returned 500 in local production-server smoke until Inngest was told to run in local dev mode. With `INNGEST_DEV=1`, the endpoint returns metadata (`function_count:6`, `mode:"dev"`).
+
+
+### D-038 — Per-rep data visibility via ownership columns + tightened RLS — 2026-06-12
+
+**Decision:** Reps see only their own synced data; admins see everything. Implemented as migration `supabase/migrations/0008_per_rep_ownership.sql`: (a) new columns `mailshake_campaigns.owner_user_id` and `mailshake_leads.assigned_user_id` (FK → users, set-null); (b) SELECT RLS rewritten on `activities`, `email_messages`, `calls`, `mailshake_campaigns`, `mailshake_leads` to `is_admin() OR user_id = auth.uid() OR account_id IN (accounts owned by auth.uid())` (child tables via the parent activity); (c) backfill of all 29 campaigns + 3,095 leads to Rayan, with cascade of `accounts.owner_user_id` and `activities.user_id` (mailshake_event channel) from lead assignment. Sync code stamps ownership on INSERT only (`MAILSHAKE_SYNC_USER_EMAIL` env var, set to rayan@schoolconex.com in Vercel prod) so admin reassignments survive future syncs. `auto-pipeline.ts importMissingAccounts` now inherits `owner_user_id` from the originating lead. `accounts`/`contacts`/`opportunities` SELECT intentionally left open to all authenticated (collaboration), per user decision.
+
+**Why:** Matthew (admin) must see everything; Rayan (rep) only his Mailshake campaigns/leads, his Dialpad calls, his Gmail. Pages read via Supabase JS (anon key + JWT) so RLS enforces automatically; crons write via Drizzle/service-role and bypass RLS by design.
+
+**Verification (2026-06-12, simulated JWTs against prod):** admin sees 178/178 activities, 176 calls, 29 campaigns; Rayan sees exactly his computed slice (74 activities, 72 calls, 45 unmatched) and can UPDATE (attach) his own unmatched activity. Manual reconciliation UI shipped: `components/crm/attach-to-account-dialog.tsx` + `attachActivityToAccount` server action + `ActivityTimeline allowAttach` prop, wired on `/inbox`.
+
+### D-039 — Role correction: Matthew is THE admin, Rayan is a rep — 2026-06-12
+
+**Decision:** `matthew@schoolconex.com` role='admin', `rayan@schoolconex.com` role='rep'. Swapped in prod DB 2026-06-12 (they were inverted — see F-019). Both user-creation scripts now re-assert the correct role on every re-run: `scripts/create-matthew-user.sql` upserts role='admin' in its ON CONFLICT branch; `scripts/create-rayan-user.sql` sets role='rep' in both its exists- and create-branches (it formerly promoted Rayan to admin, which is how the inversion happened).
+
+**Why:** Per-rep RLS (D-038) keys on `public.is_admin()`; with roles inverted, Rayan saw everything and Matthew saw only his own rows — the exact opposite of intent.

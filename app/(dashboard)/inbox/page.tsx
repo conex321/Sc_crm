@@ -12,7 +12,7 @@ export default async function UnmatchedInboxPage() {
           match a known contact. Click an item to associate it with a contact.
         </p>
       </div>
-      <ActivityTimeline activities={activities} />
+      <ActivityTimeline activities={activities} allowAttach />
     </div>
   );
 }

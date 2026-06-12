@@ -43,12 +43,17 @@ function lastSeven(p: string | null | undefined): string | null {
 }
 
 async function importMissingAccounts(): Promise<number> {
-  const rows = await db.execute<{ school_name: string }>(sql`
-    select distinct l.school_name
-    from public.mailshake_leads l
-    where l.account_id is null
-      and l.school_name is not null
-      and length(trim(l.school_name)) > 0
+  // distinct on school name; prefer rows with an assigned rep so the new
+  // account inherits ownership from the originating lead.
+  const rows = await db.execute<{ school_name: string; assigned_user_id: string | null }>(sql`
+    select distinct on (lower(trim(l.school_name)))
+           l.school_name,
+           l.assigned_user_id
+      from public.mailshake_leads l
+     where l.account_id is null
+       and l.school_name is not null
+       and length(trim(l.school_name)) > 0
+     order by lower(trim(l.school_name)), l.assigned_user_id nulls last
   `);
 
   const existing = await db
@@ -65,6 +70,7 @@ async function importMissingAccounts(): Promise<number> {
       name,
       type: "school",
       source: "mailshake",
+      ownerUserId: r.assigned_user_id,
     });
     seen.add(name.toLowerCase());
     created++;

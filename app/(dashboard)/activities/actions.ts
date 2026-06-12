@@ -83,3 +83,31 @@ export async function toggleTaskComplete(
   if (error) throw new Error(error.message);
   revalidatePath(redirectTo);
 }
+
+const attachSchema = z.object({
+  activityId: z.string().uuid(),
+  accountId: z.string().uuid(),
+  contactId: z.string().uuid().optional().or(z.literal("")),
+});
+
+export async function attachActivityToAccount(form: FormData) {
+  await requireUser();
+  const parsed = attachSchema.parse({
+    activityId: form.get("activityId") ?? "",
+    accountId: form.get("accountId") ?? "",
+    contactId: form.get("contactId") ?? "",
+  });
+
+  const sb = await getSupabaseServerClient();
+  const { error } = await sb
+    .from("activities")
+    .update({
+      account_id: parsed.accountId,
+      contact_id: nullable(parsed.contactId),
+    })
+    .eq("id", parsed.activityId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/inbox");
+  revalidatePath(`/accounts/${parsed.accountId}`);
+}

@@ -370,3 +370,48 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - commit: 03b0a35 on feat/mailshake-activation, pushed to origin.
 - pending: User must register `https://sc-crm-sand.vercel.app/auth/gmail-callback` + `http://localhost:3000/auth/gmail-callback` as authorized redirect URIs on OAuth client 489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n. Internal-mode consent screen auto-permits gmail.readonly — no scope edit needed. Browser automation script `scripts/gcp-add-gmail-redirect-uris.mts` is checked in for future runs but requires permission to drive Chrome over CDP and headed-Chrome sign-in.
 - next: Once redirect URIs land, Rayan signs in at /settings/integrations and clicks Connect Gmail. Tomorrow's 09:00 UTC gmail-sync cron starts pulling his inbox.
+
+## 2026-05-28T12:30Z — Codex
+- session: 2026-05-28 production integration validation + cron repair
+- decisions_added: []
+- failures_added: [F-018]
+- failures_resolved: [F-018]
+- files_changed: [
+    .vercelignore (exclude .claude/ and .codex/ from deploy payload),
+    Project_notes_folder/PROJECT_NOTES.md,
+    Project_notes_folder/CHANGELOG.md
+  ]
+- deploy: Fresh Vercel production deployment from commit `72163ad`; `sc-crm-sand.vercel.app` now serves the Production build with Production env.
+- verified:
+    `npm run typecheck` passed.
+    `/api/cron/mailshake-sync` returned HTTP 200: 29 campaigns, 3,095 leads, 3,060 matched accounts, 3,060 matched contacts.
+    `/api/cron/dialpad-sync` returned HTTP 200 in company scope: no new calls after watermark, `knownReps:2`.
+    Dialpad integrity query: 140 raw events, 140 processed, 140 call activities, 140 call rows, 0 missing activity/raw links, 0 duplicate call IDs, latest API sample 10/10 present in Supabase with 0 field mismatches.
+    Production UI smoke passed and Mailshake E2E rendered `/campaigns` plus top campaign detail (678 school rows).
+- caveats:
+    Mailshake REST polling only covers campaigns/recipients/lead pipeline; per-event opens/clicks/replies still require Mailshake webhook registration (F-009).
+    Generic `full-app-validate` has stale table-row expectations for `/inbox` and can pick a zero-row campaign; Mailshake-specific production E2E is the reliable campaign validation path.
+
+## 2026-05-28T16:00Z — Codex
+- session: Google SSO Supabase callback registration
+- decisions_added: []
+- failures_added: []
+- failures_resolved: []
+- cloud_config:
+    Added `https://ooanslwrwjexdjwdphes.supabase.co/auth/v1/callback` to Authorized redirect URIs on Google OAuth Web client `489266381443-vqdbp0n929pdjlj6tehpba7rtvci0e6n.apps.googleusercontent.com` in project `schoolconex-crm`.
+- files_changed: [
+    scripts/gcp-add-oauth-redirect.mts (generalized helper to accept `PLAYWRIGHT_PROFILE_DIR` and add/verify arbitrary redirect URI),
+    Project_notes_folder/PROJECT_NOTES.md,
+    Project_notes_folder/CHANGELOG.md
+  ]
+- verified:
+    Google Cloud Console showed `OAuth client saved`.
+    Reloaded the OAuth client page and confirmed URI 5 persisted as the Supabase callback.
+    Google OAuth authorize probe returned HTTP 302 with `redirect_uri_mismatch=false` for the Supabase callback.
+
+## 2026-06-12T22:10Z — Claude
+- session: sessions/2026-06-12-oauth-fix-per-rep-rls.md
+- decisions_added: [D-038, D-039]
+- failures_added: [F-019]
+- files_changed: [supabase/migrations/0008_per_rep_ownership.sql, lib/db/schema.ts, lib/integrations/mailshake-sync.ts, lib/integrations/auto-pipeline.ts, app/(dashboard)/activities/actions.ts, app/(dashboard)/inbox/page.tsx, components/crm/attach-to-account-dialog.tsx, components/crm/activity-timeline.tsx, scripts/create-matthew-user.sql, scripts/create-rayan-user.sql, Project_notes_folder/* (split to multi-file mode)]
+- next: Matthew + Rayan connect Gmail at /settings/integrations; then verify gmail-sync cron ingests; commit session changes
