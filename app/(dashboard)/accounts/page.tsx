@@ -2,19 +2,45 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
-import { listAccounts } from "@/lib/crm/accounts";
+import { listAccounts, type CustomerStatus } from "@/lib/crm/accounts";
+import { CustomerStatusBadge } from "@/components/crm/customer-status-badge";
 import { requireUser } from "@/lib/auth/session";
 import { formatDistanceToNow } from "date-fns";
 
+const STATUS_TABS: { key: string; label: string; status?: CustomerStatus; customersOnly?: boolean }[] = [
+  { key: "all", label: "All" },
+  { key: "customers", label: "Customers", customersOnly: true },
+  { key: "active", label: "Active", status: "active" },
+  { key: "inactive", label: "Inactive", status: "inactive" },
+  { key: "prospect", label: "Prospects", status: "prospect" },
+];
+
 export default async function AccountsPage(props: {
-  searchParams: Promise<{ q?: string; mine?: string }>;
+  searchParams: Promise<{ q?: string; mine?: string; status?: string }>;
 }) {
   const user = await requireUser();
+  const isAdmin = user.role === "admin";
   const params = await props.searchParams;
+  const tab = STATUS_TABS.find((t) => t.key === params.status) ?? STATUS_TABS[0];
   const accounts = await listAccounts({
     search: params.q,
     ownerId: params.mine === "1" ? user.id : undefined,
+    customerStatus: tab.status,
+    customersOnly: tab.customersOnly,
   });
+  const qs = (extra: Record<string, string | undefined>) => {
+    // Base = current filters; keys in `extra` override (undefined removes).
+    const merged: Record<string, string | undefined> = {
+      q: params.q,
+      mine: params.mine === "1" ? "1" : undefined,
+      status: params.status,
+      ...extra,
+    };
+    const sp = new URLSearchParams();
+    for (const [k, v] of Object.entries(merged)) if (v) sp.set(k, v);
+    const s = sp.toString();
+    return s ? `/accounts?${s}` : "/accounts";
+  };
 
   return (
     <div className="px-6 py-5">
@@ -28,6 +54,9 @@ export default async function AccountsPage(props: {
         </div>
         <div className="flex items-center gap-2">
           <form className="flex items-center gap-2" action="/accounts">
+            {/* Preserve the active status tab + owner filter across a search. */}
+            {params.status && <input type="hidden" name="status" value={params.status} />}
+            {params.mine === "1" && <input type="hidden" name="mine" value="1" />}
             <input
               type="text"
               name="q"
@@ -40,7 +69,7 @@ export default async function AccountsPage(props: {
             </Button>
           </form>
           <Button asChild size="sm" variant={params.mine === "1" ? "default" : "outline"}>
-            <Link href={params.mine === "1" ? "/accounts" : "/accounts?mine=1"}>
+            <Link href={qs({ mine: params.mine === "1" ? undefined : "1" })}>
               {params.mine === "1" ? "All" : "Mine"}
             </Link>
           </Button>
@@ -50,6 +79,20 @@ export default async function AccountsPage(props: {
             </Link>
           </Button>
         </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {STATUS_TABS.map((t) => (
+          <Button
+            key={t.key}
+            asChild
+            size="sm"
+            variant={tab.key === t.key ? "default" : "outline"}
+            className="h-7 text-xs"
+          >
+            <Link href={qs({ status: t.key === "all" ? undefined : t.key })}>{t.label}</Link>
+          </Button>
+        ))}
       </div>
 
       {accounts.length === 0 ? (
@@ -66,9 +109,10 @@ export default async function AccountsPage(props: {
             <thead className="bg-muted/40 text-left text-[11px] uppercase text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-medium">Name</th>
+                <th className="px-3 py-2 font-medium">Status</th>
                 <th className="px-3 py-2 font-medium">Type</th>
                 <th className="px-3 py-2 font-medium">Owner</th>
-                <th className="px-3 py-2 font-medium">Phone</th>
+                {isAdmin && <th className="px-3 py-2 font-medium">Outstanding</th>}
                 <th className="px-3 py-2 font-medium">Country</th>
                 <th className="px-3 py-2 font-medium">Updated</th>
               </tr>
@@ -88,6 +132,9 @@ export default async function AccountsPage(props: {
                     </Link>
                   </td>
                   <td>
+                    <CustomerStatusBadge status={a.customer_status} />
+                  </td>
+                  <td>
                     <Badge variant="secondary" className="font-normal capitalize">
                       {a.type.replace("_", " ")}
                     </Badge>
@@ -95,7 +142,13 @@ export default async function AccountsPage(props: {
                   <td className="text-muted-foreground">
                     {a.owner?.full_name ?? "—"}
                   </td>
-                  <td className="text-muted-foreground">{a.phone ?? "—"}</td>
+                  {isAdmin && (
+                    <td className="tabular-nums text-muted-foreground">
+                      {typeof a.billing_summary?.outstanding === "number"
+                        ? `CA$${a.billing_summary.outstanding.toLocaleString()}`
+                        : "—"}
+                    </td>
+                  )}
                   <td className="text-muted-foreground">{a.country ?? "—"}</td>
                   <td className="text-muted-foreground">
                     {formatDistanceToNow(new Date(a.updated_at), { addSuffix: true })}

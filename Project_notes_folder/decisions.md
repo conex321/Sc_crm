@@ -218,3 +218,29 @@
 **Decision:** `matthew@schoolconex.com` role='admin', `rayan@schoolconex.com` role='rep'. Swapped in prod DB 2026-06-12 (they were inverted — see F-019). Both user-creation scripts now re-assert the correct role on every re-run: `scripts/create-matthew-user.sql` upserts role='admin' in its ON CONFLICT branch; `scripts/create-rayan-user.sql` sets role='rep' in both its exists- and create-branches (it formerly promoted Rayan to admin, which is how the inversion happened).
 
 **Why:** Per-rep RLS (D-038) keys on `public.is_admin()`; with roles inverted, Rayan saw everything and Matthew saw only his own rows — the exact opposite of intent.
+
+### D-040 — Notes-process wiring standardized across agent entry points — 2026-07-03
+
+**Decision:** The CRM repo follows the same project-memory setup as `E:\Claude\SchoolConex\` and `E:\Claude\Cobionix\`: (a) repo root `CLAUDE.md` created — hard rules (gws-sc account lock, draft-only email/Slack), read-`Project_notes_folder`-first instruction, update-project-notes self-perpetuation clause, and the repo footguns (Drizzle-service-role vs Supabase-RLS split, NEXT_PUBLIC_* rebuild requirement, D-039 roles, commit/push-only-on-request); (b) a `E:\Claude\SchoolConex\SchoolConex_CRM\` row added to the project mapping table in the global skill `C:\Users\msefa\.claude\skills\update-project-notes\SKILL.md`, placed above the broader `E:\Claude\SchoolConex\` row so the more specific prefix wins; (c) project-local skill copies confirmed byte-identical in `.claude\skills\` and `.codex\skills\` (md5 bb863a0d…) — any future edit must be applied to both.
+
+**Why:** Matthew asked for the CRM's notes folder and process to mirror the other project folders. The notes folder and local skill already existed; the missing pieces were the root CLAUDE.md wiring (Cobionix pattern) and the global mapping-table registry row.
+
+**How to apply:** Nothing to run. A fresh agent in this repo reads `CLAUDE.md` → `Project_notes_folder\PROJECT_NOTES.md` → `context.md` → last 3 lines of `sessions\INDEX.md`, then keeps notes updated via the local skill.
+
+### D-041 — QuickBooks + Stripe customer import into the CRM — 2026-07-06
+
+**Decision:** SchoolConex's real customer book (signed-up + churned) was pulled from live QuickBooks Online + Stripe and imported into CRM `accounts`/`contacts` with an active/inactive/prospect lifecycle. Result: **72 customer accounts (34 active / 7 inactive / 31 prospect), 45 contacts**; billing rollup $1.34M invoiced / $291k outstanding.
+
+**Data source + auth (critical):** The QBO refresh token is owned by the production finance server (Hetzner `schoolconex-finance`, 78.47.233.60, app `/opt/cfo/app`, daily 06:00 America/Toronto sync; ref D-063 in `SchoolConex_Quickbooks_Api`). The local `.env` token is a stale bootstrap — using it would fail or break the prod sync. The pull was run **server-side** over SSH (`~/.ssh/hetzner_codinginabox_ed25519`), reusing the app's own `src/services/qbo.js` auth so the one triggered token rotation persisted correctly; a temp read-only script (`scripts/export-customers-crm.mjs`) was copied in, run, its JSON scp'd back, and the script removed. Pulled `Customer WHERE Active=true` + `Active=false` (union), all invoices/payments, and live Stripe customers. Live data > offline exports: offline files were active-only and stale (e.g. Lorvale showed active though inactivated 2026-06-26).
+
+**Pipeline (both re-runnable, PII git-ignored under `.quickbooks/`):**
+1. `scripts/quickbooks-build-canonical.mts` — dedupe + classify → `.quickbooks/qbo-canonical.json`. Trusts live QBO "(merged into X)" annotations + Active flag as authoritative (the 2026-05-28 review CSV was stale, even had #212/#213 backwards). Drops 5 merge-shells, applies an explicit MERGE map for not-yet-merged dups (incl. Doon #96→#93), folds 29/34 Stripe by email→name, skips 2 deleted-shell Stripe records, creates 3 new Stripe-only. Two "Michelle Zhang" (#5/#138) kept SEPARATE (namesakes, different emails). Classification: `inactive` if primary QBO record Active=false OR last invoice >18mo; `prospect` if never invoiced; else `active`.
+2. `scripts/quickbooks-import-customers.mts` (npm `quickbooks:import`, `--dry`) — idempotent upsert. Match order: `external_ids->>'quickbooks_id'` → stripe id → normalized name (enriches existing Mailshake accounts instead of duplicating — 7 enriched). Owner left null. Re-run = 0 inserts.
+
+**Schema (migration 0009 + `lib/db/schema.ts`):** added to `accounts`: `customer_status` enum(active/inactive/prospect), `external_ids jsonb default {}` (quickbooks_id/quickbooks_ids/stripe_ids), `email text`, `billing_summary jsonb`. Idempotent (guarded enum + add-column-if-not-exists + indexes); verified re-run-safe. No RLS change (accounts SELECT stays open per D-038).
+
+**UI:** accounts list has a status filter (All/Customers/Active/Inactive/Prospect) + Status badge column; detail page shows a billing card. **Revenue figures (Outstanding column + billing card) are admin-only** — consistent with D-038 (reps see only their own data); reps see the status badge but not dollar amounts. Amounts labeled CAD.
+
+**Verification:** adversarial multi-agent review (8 findings, all fixed: namesake-enrich collapse guard, importer/builder norm alignment, billing_summary coalesce-not-wipe, admin-gated revenue, CAD labeling, querystring preservation, $0 display). Spot-checks: Choice Education active ($495k inv), Lorvale inactive ✓, both Michelle Zhangs separate ✓. `tsc` + `next build` green. Import NOT re-run after fixes (edge cases never fired; current data correct).
+
+**Open:** (a) confirm reps (Rayan) should stay revenue-blind, or relax the admin gate; (b) not committed/deployed yet — awaiting Matthew.

@@ -46,6 +46,14 @@ export const activityDirectionEnum = pgEnum("activity_direction", [
   "outbound",
   "system",
 ]);
+// Customer lifecycle for accounts sourced from billing systems (QuickBooks/Stripe).
+// active = current signed-up customer; inactive = churned / archived / no invoice in 18mo;
+// prospect = known but never invoiced. Null for non-customer accounts (e.g. Mailshake leads).
+export const customerStatusEnum = pgEnum("customer_status", [
+  "active",
+  "inactive",
+  "prospect",
+]);
 
 // ─── Audit columns helper (D-015) ────────────────────────────────────
 const auditCols = {
@@ -89,6 +97,15 @@ export const accounts = pgTable("accounts", {
   country: text("country"),
   ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
   source: text("source"),
+  // Billing-system customer fields (QuickBooks/Stripe import, D-041).
+  email: text("email"),
+  customerStatus: customerStatusEnum("customer_status"),
+  // External system ids for idempotent re-imports:
+  // { quickbooks_id, quickbooks_ids: [...merged dups], stripe_ids: [...] }.
+  externalIds: jsonb("external_ids").notNull().default({}),
+  // Invoice/payment rollup:
+  // { invoiced, paid, outstanding, invoiceCount, paymentCount, firstInvoiceDate, lastInvoiceDate, currency }.
+  billingSummary: jsonb("billing_summary"),
   ...auditCols,
   ...softDelete,
 });

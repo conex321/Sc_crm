@@ -1,3 +1,6 @@
 # Session index — newest first
 
+- 2026-07-06 — `2026-07-06-quickbooks-customer-import.md` — Imported 72 QuickBooks/Stripe customers (34 active / 7 inactive / 31 prospect) + 45 contacts into the CRM (D-041): server-side QBO pull over SSH, migration 0009, dedup pipeline, admin-only billing UI, adversarial review (8 fixes). Not committed/deployed.
+
+- 2026-07-03 — `2026-07-03-notes-infrastructure-alignment.md` — Notes wiring standardized (D-040): repo root CLAUDE.md added, CRM row added to global skill mapping table; no app code changed. Gmail-connect handoff still pending.
 - 2026-06-12 — `2026-06-12-oauth-fix-per-rep-rls.md` — Prod SSO fixed (NEXT_PUBLIC_SITE_URL), per-rep RLS shipped (migration 0008), role swap corrected (D-039), /inbox attach UI, notes split to multi-file mode.

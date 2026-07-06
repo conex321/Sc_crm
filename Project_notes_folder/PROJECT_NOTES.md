@@ -1,10 +1,10 @@
 # Project Notes — SchoolConex CRM
 
-**Last updated:** 2026-06-12
+**Last updated:** 2026-07-06
 **Last agent:** Claude
-**Session summary:** Production OAuth login fixed (NEXT_PUBLIC_SITE_URL was localhost in Vercel). Per-rep data separation shipped: migration 0008 (ownership columns + RLS), Mailshake owner stamping, /inbox attach-to-account UI. Role swap corrected: Matthew=admin, Rayan=rep (D-039). RLS verified live via simulated JWTs.
+**Session summary:** Imported the real customer book from live QuickBooks + Stripe into the CRM (D-041): 72 customer accounts (34 active / 7 inactive / 31 prospect) + 45 contacts, with active/inactive/prospect status, billing rollups ($1.34M invoiced / $291k outstanding), dedup of QBO+Stripe duplicates, and an accounts-list status filter. QBO pull run server-side over SSH (token owned by the prod finance server). Schema migration 0009 applied; adversarial review passed (8 findings fixed). NOT committed/deployed yet. Prior: notes-process wiring (D-040); prod OAuth + per-rep RLS (D-038/D-039).
 **Notes mode:** split
-**Total sessions logged:** 1 (split-mode sessions; earlier history inline in accomplishments.md)
+**Total sessions logged:** 3 (split-mode sessions; earlier history inline in accomplishments.md)
 
 ---
 
@@ -28,6 +28,8 @@
 - Auth works against Supabase Google SSO **in production** (verified 2026-06-06): root cause of the prod login failure was `NEXT_PUBLIC_SITE_URL=http://localhost:3000` in Vercel prod env — fixed to `https://sc-crm-sand.vercel.app` + redeploy. All GCP redirect URIs verified registered 2026-06-12 (Supabase callback, Gmail prod/local callbacks, Drive callback).
 - First @schoolconex.com sign-in is auto-promoted to admin. **Roles asserted per D-039 (2026-06-12): matthew@schoolconex.com = admin, rayan@schoolconex.com = rep.** Both create-user scripts re-assert these roles on re-run.
 - **Per-rep visibility live (D-038, migration 0008, 2026-06-12):** reps see only their own activities/calls/emails + activities on accounts they own; admin sees all. `mailshake_campaigns.owner_user_id` / `mailshake_leads.assigned_user_id` added; all 29 campaigns + 3,095 leads backfilled to Rayan; new syncs stamp owner from `MAILSHAKE_SYNC_USER_EMAIL` (set in Vercel prod). `/inbox` has an "Attach to account" dialog for manual reconciliation. RLS verified 2026-06-12 via simulated JWTs: admin 178/178 activities, Rayan exactly his 74.
+
+- **Customer book imported from QuickBooks + Stripe (D-041, migration 0009, 2026-07-06):** 72 customer accounts (34 active / 7 inactive / 31 prospect) + 45 contacts, tagged `customer_status` with `billing_summary` rollups ($1.34M invoiced / $291k outstanding) and `external_ids` (quickbooks_id/stripe_ids). Pulled server-side over SSH from the prod finance server (token owner). Re-runnable via `npm run quickbooks:build-canonical` then `quickbooks:import` (source JSON git-ignored under `.quickbooks/`). Accounts list has a status filter + Status badge; revenue figures are **admin-only**. NOT committed/deployed yet.
 
 **What's *live* today (Phase 1 functional UI):**
 - Sign in → Accounts list / detail-360 (Activity, Contacts, Opportunities, Documents tabs)

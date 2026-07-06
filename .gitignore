@@ -57,6 +57,12 @@ test.md
 .playwright-shots/
 .secrets/
 
+# Offboarding artifacts (mailbox exports, temp credentials, per-user records) — never commit
+.offboarding/
+
+# QuickBooks/Stripe customer export (live PII: names, emails, balances) — never commit
+.quickbooks/
+
 # vercel
 .vercel
 

@@ -25,6 +25,7 @@ import {
 import { listAccountCampaignActivity } from "@/lib/crm/mailshake";
 import { ExternalLink, Send } from "lucide-react";
 import { ContactList } from "@/components/crm/contact-list";
+import { CustomerStatusBadge } from "@/components/crm/customer-status-badge";
 import { OpportunityList } from "@/components/crm/opportunity-list";
 import { ActivityTimeline } from "@/components/crm/activity-timeline";
 import { NoteComposer } from "@/components/crm/note-composer";
@@ -71,6 +72,7 @@ export default async function AccountDetailPage(props: {
           <div>
             <h1 className="text-lg font-semibold tracking-tight">{account.name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <CustomerStatusBadge status={account.customer_status} />
               <Badge variant="secondary" className="capitalize">
                 {account.type.replace("_", " ")}
               </Badge>
@@ -95,6 +97,12 @@ export default async function AccountDetailPage(props: {
           <SummaryRow icon={Globe} label="Website" value={account.website} link />
           <SummaryRow icon={Phone} label="Phone" value={account.phone} />
           <SummaryRow icon={MapPin} label="Country" value={account.country} />
+          {account.email && (
+            <div className="col-span-full text-muted-foreground">
+              <span className="font-medium text-foreground">Email: </span>
+              {account.email}
+            </div>
+          )}
           {account.address && (
             <div className="col-span-full text-muted-foreground">
               <span className="font-medium text-foreground">Address: </span>
@@ -103,6 +111,32 @@ export default async function AccountDetailPage(props: {
           )}
         </CardContent>
       </Card>
+
+      {user.role === "admin" && account.billing_summary && (
+        <Card className="mb-5">
+          <CardContent className="p-4">
+            <div className="mb-2 text-xs font-medium text-foreground">
+              Billing · CAD (QuickBooks{account.external_ids?.stripe_ids &&
+                Array.isArray(account.external_ids.stripe_ids) &&
+                account.external_ids.stripe_ids.length > 0
+                ? " + Stripe"
+                : ""}
+              )
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+              <BillingStat label="Invoiced" value={account.billing_summary.invoiced} />
+              <BillingStat label="Paid" value={account.billing_summary.paid} />
+              <BillingStat label="Outstanding" value={account.billing_summary.outstanding} />
+              <div>
+                <div className="text-muted-foreground">Last invoice</div>
+                <div className="mt-0.5 font-medium tabular-nums">
+                  {account.billing_summary.lastInvoiceDate ?? "—"}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Panels 2+: Activity / Contacts / Opportunities / Documents */}
       <Tabs defaultValue="activity">
@@ -303,6 +337,17 @@ function SummaryRow({
       ) : (
         <span>—</span>
       )}
+    </div>
+  );
+}
+
+function BillingStat({ label, value }: { label: string; value?: number }) {
+  return (
+    <div>
+      <div className="text-muted-foreground">{label}</div>
+      <div className="mt-0.5 font-medium tabular-nums">
+        {typeof value === "number" ? `CA$${value.toLocaleString()}` : "—"}
+      </div>
     </div>
   );
 }

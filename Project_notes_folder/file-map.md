@@ -10,6 +10,9 @@
 - `scripts/` — operational scripts:
   - `apply-sql.mts` / `run-demo-user.mts` / `run-rayan-user.mts` / `remove-rayan-user.mts` — DB ops
   - `dialpad-{lookup-user,list-calls,backfill}.mts` — Dialpad ops (`npm run dialpad:*`)
+  - `quickbooks-build-canonical.mts` (`npm run quickbooks:build-canonical`) — dedupe + classify the QBO/Stripe export → `.quickbooks/qbo-canonical.json`
+  - `quickbooks-import-customers.mts` (`npm run quickbooks:import [-- --dry]`) — idempotent upsert of customers into accounts+contacts (D-041)
+  - `export-customers-crm.mjs` — the read-only QBO+Stripe pull run **on the prod finance server** over SSH (kept in scratchpad, not the repo tree; token owner = Hetzner `schoolconex-finance`)
   - `check-calls.mts` — DB inspection
   - `e2e-rayan.mts` + `e2e-inbox-check.mts` — programmatic e2e auth + render tests
   - `browser-launch.mts` — long-running headed Chrome over CDP, port 9222
@@ -23,6 +26,7 @@
 - `.playwright-profile/` — persistent Chrome profile (gitignored)
 - `.playwright-shots/` — debugging screenshots from automation runs (gitignored)
 - `.secrets/service-account.json` — Drive service account JSON key (gitignored)
+- `.quickbooks/` — QuickBooks/Stripe customer export + canonical JSON (live PII: names/emails/balances) — gitignored
 - `.env.local` — Supabase URL+anon, Postgres DATABASE_URL, Dialpad admin key + Rayan filter, Google OAuth client id+secret + service account JSON + folder IDs + project id (gitignored)
 - `test.md` — empty file user opened in IDE; ignore
 - Outside project root:

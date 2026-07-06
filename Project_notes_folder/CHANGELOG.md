@@ -415,3 +415,18 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - failures_added: [F-019]
 - files_changed: [supabase/migrations/0008_per_rep_ownership.sql, lib/db/schema.ts, lib/integrations/mailshake-sync.ts, lib/integrations/auto-pipeline.ts, app/(dashboard)/activities/actions.ts, app/(dashboard)/inbox/page.tsx, components/crm/attach-to-account-dialog.tsx, components/crm/activity-timeline.tsx, scripts/create-matthew-user.sql, scripts/create-rayan-user.sql, Project_notes_folder/* (split to multi-file mode)]
 - next: Matthew + Rayan connect Gmail at /settings/integrations; then verify gmail-sync cron ingests; commit session changes
+
+## 2026-07-03T17:28Z — Claude
+- session: sessions/2026-07-03-notes-infrastructure-alignment.md
+- decisions_added: [D-040]
+- failures_added: []
+- files_changed: [CLAUDE.md (new repo root), C:\Users\msefa\.claude\skills\update-project-notes\SKILL.md (CRM mapping-table row), Project_notes_folder/PROJECT_NOTES.md, Project_notes_folder/decisions.md, Project_notes_folder/sessions/INDEX.md, Project_notes_folder/sessions/2026-07-03-notes-infrastructure-alignment.md]
+- next: Matthew + Rayan connect Gmail at /settings/integrations, then trigger /api/cron/gmail-sync; push 4663f9a + commit CLAUDE.md/notes when Matthew asks
+
+## 2026-07-06T15:10Z — Claude
+- session: sessions/2026-07-06-quickbooks-customer-import.md
+- decisions_added: [D-041]
+- failures_added: []
+- files_changed: [scripts/quickbooks-build-canonical.mts (new), scripts/quickbooks-import-customers.mts (new), supabase/migrations/0009_quickbooks_customers.sql (new), lib/db/schema.ts, lib/crm/accounts.ts, app/(dashboard)/accounts/page.tsx, app/(dashboard)/accounts/[id]/page.tsx, components/crm/customer-status-badge.tsx (new), package.json, .gitignore, Project_notes_folder/*]
+- db: migration 0009 applied to prod (ooanslwrwjexdjwdphes); 72 customer accounts + 45 contacts imported from live QuickBooks+Stripe
+- next: decide reps-see-revenue or not; commit + deploy when Matthew asks; Matthew+Rayan connect Gmail
