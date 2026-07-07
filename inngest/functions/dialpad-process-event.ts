@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { integrationEventsRaw, calls } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { extractCallEvent } from "@/lib/integrations/dialpad";
-import { matchPhoneToContact } from "@/lib/integrations/contact-matcher";
+import { matchIdentityToContact } from "@/lib/integrations/contact-matcher";
 import { recordActivity } from "@/lib/integrations/record-activity";
 
 function humanizeDuration(seconds?: number): string {
@@ -72,10 +72,13 @@ export const dialpadProcessEvent = inngest.createFunction(
 
     const externalPhone = ev.external_number ?? ev.contact?.phone;
 
-    let match = null as Awaited<ReturnType<typeof matchPhoneToContact>>;
-    if (externalPhone) {
-      match = await step.run("match-contact", () => matchPhoneToContact(externalPhone));
-    }
+    const match = await step.run("match-contact", () =>
+      matchIdentityToContact({
+        phone: externalPhone,
+        email: ev.contact?.email,
+        name: ev.contact?.name,
+      }),
+    );
 
     const summary = `${ev.direction === "inbound" ? "Inbound" : "Outbound"} call · ${humanizeDuration(ev.duration)}${ev.call_disposition ? ` · ${ev.call_disposition}` : ""}`;
 

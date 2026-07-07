@@ -88,7 +88,7 @@ export default async function CampaignsPage(props: {
 
       {campaigns.length === 0 ? (
         <div className="text-muted-foreground rounded-md border border-dashed p-8 text-center text-sm">
-          No campaigns synced yet. The 30-min sync runs automatically; trigger manually with{" "}
+          No campaigns synced yet. The daily sync runs automatically; trigger manually with{" "}
           <code className="text-xs">npm run mailshake:sync</code>.
         </div>
       ) : (

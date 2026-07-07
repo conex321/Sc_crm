@@ -20,16 +20,37 @@ import { toast } from "sonner";
 import { moveOpportunityStage } from "@/app/(dashboard)/opportunities/actions";
 import type { OpportunityWithRefs } from "@/lib/crm/opportunities";
 
-const formatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+// Amounts can carry per-opportunity currencies; format each in its own.
+// CAD is the house currency (QuickBooks), so it's the default/fallback.
+function fmtMoney(amount: number, currency = "CAD"): string {
+  const locale = currency === "USD" ? "en-US" : "en-CA";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+/** Sum a set of opps, grouping by currency, and render "CA$X + US$Y". */
+function sumByCurrency(opps: OpportunityWithRefs[], weighted = false, stages?: Stage[]): string {
+  const totals = new Map<string, number>();
+  for (const o of opps) {
+    const amt = Number(o.amount ?? 0);
+    if (!amt) continue;
+    const prob = weighted
+      ? (stages?.find((s) => s.id === o.stage_id)?.probability ?? 0) / 100
+      : 1;
+    totals.set(o.currency, (totals.get(o.currency) ?? 0) + amt * prob);
+  }
+  if (totals.size === 0) return fmtMoney(0);
+  return [...totals.entries()].map(([c, v]) => fmtMoney(v, c)).join(" + ");
+}
 
 type Stage = {
   id: string;
   name: string;
   position: number;
+  probability: number;
   is_won: boolean;
   is_lost: boolean;
 };
@@ -37,19 +58,28 @@ type Stage = {
 export function PipelineBoard({
   stages,
   initialOpportunities,
+  currentUserId,
 }: {
   stages: Stage[];
   initialOpportunities: OpportunityWithRefs[];
+  currentUserId: string;
 }) {
   const [opportunities, setOpportunities] = useState(initialOpportunities);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [mineOnly, setMineOnly] = useState(false);
   const [, startTransition] = useTransition();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
   );
 
+  const visible = mineOnly
+    ? opportunities.filter((o) => o.owner_user_id === currentUserId)
+    : opportunities;
   const byStage = (stageId: string) =>
-    opportunities.filter((o) => o.stage_id === stageId);
+    visible.filter((o) => o.stage_id === stageId);
+  const mineCount = opportunities.filter(
+    (o) => o.owner_user_id === currentUserId,
+  ).length;
 
   const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
 
@@ -88,6 +118,7 @@ export function PipelineBoard({
   };
 
   const active = activeId ? opportunities.find((o) => o.id === activeId) : null;
+  const openVisible = visible.filter((o) => o.status === "open");
 
   return (
     <DndContext
@@ -95,6 +126,29 @@ export function PipelineBoard({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">
+            {sumByCurrency(openVisible)}
+          </span>{" "}
+          open ·{" "}
+          <span className="font-medium text-foreground">
+            {sumByCurrency(openVisible, true, stages)}
+          </span>{" "}
+          weighted forecast
+        </div>
+        <button
+          type="button"
+          onClick={() => setMineOnly((v) => !v)}
+          className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
+            mineOnly
+              ? "bg-background shadow-sm"
+              : "bg-muted/20 text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          {mineOnly ? "Showing mine" : "Mine only"} ({mineCount})
+        </button>
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-4">
         {stages.map((stage) => (
           <StageColumn
@@ -119,7 +173,6 @@ function StageColumn({
   opportunities: OpportunityWithRefs[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-  const total = opportunities.reduce((acc, o) => acc + Number(o.amount ?? 0), 0);
 
   return (
     <div
@@ -131,6 +184,9 @@ function StageColumn({
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium">{stage.name}</span>
+          {stage.probability > 0 && !stage.is_won && !stage.is_lost && (
+            <span className="text-[10px] text-muted-foreground">{stage.probability}%</span>
+          )}
           {stage.is_won && (
             <Badge variant="default" className="text-[10px]">
               won
@@ -143,7 +199,7 @@ function StageColumn({
           )}
         </div>
         <div className="text-[10px] text-muted-foreground">
-          {opportunities.length} · {formatter.format(total)}
+          {opportunities.length} · {sumByCurrency(opportunities)}
         </div>
       </div>
       <div className="flex flex-col gap-2 p-2">
@@ -196,7 +252,7 @@ function OpportunityCard({
         <div className="text-muted-foreground">{opp.account?.name ?? "—"}</div>
         <div className="flex items-center justify-between text-[11px]">
           <span className="font-medium">
-            {opp.amount ? formatter.format(Number(opp.amount)) : "—"}
+            {opp.amount ? fmtMoney(Number(opp.amount), opp.currency) : "—"}
           </span>
           {opp.expected_close_date && (
             <span className="text-muted-foreground">

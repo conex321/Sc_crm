@@ -30,9 +30,12 @@
     "mailshake:import-contacts": "tsx scripts/mailshake-import-contacts.mts",
     "mailshake:stats": "tsx scripts/mailshake-stats.mts",
     "dialpad:rematch-calls": "tsx scripts/dialpad-rematch-calls.mts",
+    "dialpad:rematch-identity": "tsx scripts/dialpad-rematch-identity.mts",
     "status:audit": "tsx scripts/status-audit.mts",
     "quickbooks:build-canonical": "tsx scripts/quickbooks-build-canonical.mts",
-    "quickbooks:import": "tsx scripts/quickbooks-import-customers.mts"
+    "quickbooks:import": "tsx scripts/quickbooks-import-customers.mts",
+    "customers:assign-owners": "tsx scripts/assign-customer-owners.mts",
+    "demo:purge": "tsx scripts/purge-demo-data.mts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -53,6 +56,7 @@
     "lucide-react": "^0.468.0",
     "next": "^16.2.4",
     "next-themes": "^0.4.6",
+    "nodemailer": "^9.0.3",
     "postgres": "^3.4.5",
     "radix-ui": "^1.4.3",
     "react": "19.0.0",
@@ -68,6 +72,7 @@
     "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.10.1",
+    "@types/nodemailer": "^8.0.1",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
     "drizzle-kit": "^0.31.10",

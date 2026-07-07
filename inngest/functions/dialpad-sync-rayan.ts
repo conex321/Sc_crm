@@ -11,7 +11,7 @@ import {
   type DialpadCall,
 } from "@/lib/integrations/dialpad-client";
 import { recordActivity } from "@/lib/integrations/record-activity";
-import { matchPhoneToContact } from "@/lib/integrations/contact-matcher";
+import { matchIdentityToContact } from "@/lib/integrations/contact-matcher";
 
 const FILTER_USER_ID = process.env.DIALPAD_FILTER_USER_ID ?? "";
 const FILTER_USER_PHONE = process.env.DIALPAD_FILTER_USER_PHONE ?? "";
@@ -54,7 +54,13 @@ async function ingestCall(c: DialpadCall, rawId: string) {
   const startedAt = toEpochMs(c.date_started ?? c.date_connected);
   const isInternal = c.contact?.email?.endsWith("@schoolconex.com") ?? false;
 
-  const match = externalPhone && !isInternal ? await matchPhoneToContact(externalPhone) : null;
+  const match = isInternal
+    ? null
+    : await matchIdentityToContact({
+        phone: externalPhone,
+        email: c.contact?.email,
+        name: c.contact?.name,
+      });
 
   const dur = durationSeconds(c);
   const summary = `${c.direction === "inbound" ? "Inbound" : "Outbound"} call · ${humanizeDuration(dur)}${c.call_disposition ? ` · ${c.call_disposition}` : ""}${isInternal ? " · internal" : ""}`;

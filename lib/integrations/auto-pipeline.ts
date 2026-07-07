@@ -5,9 +5,10 @@ import {
   contacts,
   mailshakeLeads,
   activities,
+  users,
   calls as callsTable,
 } from "@/lib/db/schema";
-import { sql, eq, and, isNull, ne } from "drizzle-orm";
+import { sql, eq, and, isNull } from "drizzle-orm";
 
 /**
  * Auto-pipeline run after every Mailshake sync. Brings the CRM up to date with
@@ -154,26 +155,55 @@ async function importMissingContacts(): Promise<{
   return { created: inserted.length, linked: linked.length };
 }
 
-async function rematchUnlinkedCalls(): Promise<number> {
-  const RAYAN = (process.env.DIALPAD_FILTER_USER_PHONE ?? "+14375234132").replace(/\D/g, "");
-  const rayanLast7 = RAYAN.slice(-7);
+const normName = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  const unmatched = await db
-    .select({
-      activityId: activities.id,
-      direction: activities.direction,
-      fromNumber: callsTable.fromNumber,
-      toNumber: callsTable.toNumber,
-    })
-    .from(activities)
-    .leftJoin(callsTable, eq(callsTable.activityId, activities.id))
-    .where(
-      and(
-        eq(activities.channel, "call"),
-        isNull(activities.accountId),
-        ne(activities.direction, "system"),
-      ),
-    );
+/**
+ * Re-link unmatched calls by every identity signal we have: the call's phone
+ * numbers (existing behaviour) plus the Dialpad contact email/name stored in
+ * the raw payload. Name matches are unique-only (skip ambiguous names).
+ * On an email/name match, the contact's missing phone is backfilled from the
+ * call so future calls match on the fast phone path.
+ */
+async function rematchUnlinkedCalls(): Promise<number> {
+  const repPhoneRows = await db
+    .select({ phone: users.dialpadPhone })
+    .from(users)
+    .where(sql`${users.dialpadPhone} is not null`);
+  const repLast7s = new Set(
+    [...repPhoneRows.map((r) => r.phone), process.env.DIALPAD_FILTER_USER_PHONE ?? "+14375234132"]
+      .map((p) => lastSeven(normalizePhone(p)))
+      .filter((p): p is string => Boolean(p)),
+  );
+
+  // Unmatched calls + identity from the raw Dialpad payload. Older backfill
+  // rows stored the payload double-encoded as a JSON string — unwrap both
+  // shapes (read-only; historical payloads are never rewritten).
+  const unmatched = await db.execute<{
+    activity_id: string;
+    from_number: string | null;
+    to_number: string | null;
+    p_email: string | null;
+    p_name: string | null;
+  }>(sql`
+    with ev as (
+      select event_id,
+             case when jsonb_typeof(payload) = 'string'
+                  then (payload #>> '{}')::jsonb
+                  else payload end as p
+        from public.integration_events_raw
+       where provider = 'dialpad'
+    )
+    select a.id as activity_id, c.from_number, c.to_number,
+           ev.p->'contact'->>'email' as p_email,
+           ev.p->'contact'->>'name'  as p_name
+      from public.activities a
+      left join public.calls c on c.activity_id = a.id
+      left join ev on ev.event_id = c.dialpad_call_id
+     where a.channel = 'call'
+       and a.account_id is null
+       and a.direction <> 'system'
+       and a.summary not like '%internal%'
+  `);
   if (unmatched.length === 0) return 0;
 
   const contactRows = await db
@@ -182,38 +212,102 @@ async function rematchUnlinkedCalls(): Promise<number> {
       accountId: contacts.accountId,
       phone: contacts.phone,
       whatsappPhone: contacts.whatsappPhone,
+      email: contacts.email,
+      firstName: contacts.firstName,
+      lastName: contacts.lastName,
     })
     .from(contacts)
-    .where(
-      sql`${contacts.deletedAt} is null and (${contacts.phone} is not null or ${contacts.whatsappPhone} is not null)`,
-    );
+    .where(sql`${contacts.deletedAt} is null`);
 
-  const idx = new Map<string, { contactId: string; accountId: string }>();
+  type Hit = { contactId: string | null; accountId: string; hasPhone: boolean };
+  const byPhone = new Map<string, Hit>();
+  const byEmail = new Map<string, Hit>();
+  const byContactName = new Map<string, Hit | "ambiguous">();
   for (const c of contactRows) {
+    const hit: Hit = { contactId: c.id, accountId: c.accountId, hasPhone: Boolean(c.phone) };
     for (const p of [c.phone, c.whatsappPhone]) {
       const l7 = lastSeven(normalizePhone(p));
-      if (!l7 || l7 === rayanLast7) continue;
-      if (!idx.has(l7)) idx.set(l7, { contactId: c.id, accountId: c.accountId });
+      if (!l7 || repLast7s.has(l7)) continue;
+      if (!byPhone.has(l7)) byPhone.set(l7, hit);
+    }
+    if (c.email) {
+      const e = c.email.trim().toLowerCase();
+      if (e && !byEmail.has(e)) byEmail.set(e, hit);
+    }
+    const fullName = `${c.firstName} ${c.lastName}`.trim().toLowerCase();
+    if (fullName.length >= 5) {
+      byContactName.set(fullName, byContactName.has(fullName) ? "ambiguous" : hit);
     }
   }
-  if (idx.size === 0) return 0;
+
+  const accountRows = await db
+    .select({ id: accounts.id, name: accounts.name })
+    .from(accounts)
+    .where(sql`${accounts.deletedAt} is null`);
+  const byAccountName = new Map<string, Hit | "ambiguous">();
+  const accountNorms: Array<{ norm: string; hit: Hit }> = [];
+  for (const a of accountRows) {
+    const n = normName(a.name);
+    if (n.length < 6) continue;
+    const hit: Hit = { contactId: null, accountId: a.id, hasPhone: true };
+    byAccountName.set(n, byAccountName.has(n) ? "ambiguous" : hit);
+    accountNorms.push({ norm: n, hit });
+  }
+
+  // Freeform Dialpad labels ("Tim - St. Mary", "Janki (Veritas International
+  // School)"): try each label segment against account names by substring,
+  // unique winner only; digit-only segments (caller-ID numbers) skipped.
+  const containmentMatch = (rawName: string): Hit | null => {
+    const segments = rawName
+      .split(/[-(),·/|]+/)
+      .map((s) => normName(s))
+      .filter((s) => s.length >= 6 && !/^\d+$/.test(s));
+    const whole = normName(rawName);
+    if (whole.length >= 8 && !/^\d+$/.test(whole) && !segments.includes(whole)) {
+      segments.push(whole);
+    }
+    if (segments.length === 0) return null;
+    let found: Hit | null = null;
+    for (const { norm, hit } of accountNorms) {
+      for (const seg of segments) {
+        if (norm.includes(seg) || (norm.length >= 8 && seg.includes(norm))) {
+          if (found && found.accountId !== hit.accountId) return null;
+          found = hit;
+          break;
+        }
+      }
+    }
+    return found;
+  };
 
   let matched = 0;
   for (const u of unmatched) {
-    const candidates = [u.fromNumber, u.toNumber]
-      .map(normalizePhone)
-      .filter((p): p is string => Boolean(p))
-      .map((p) => lastSeven(p))
-      .filter((p): p is string => Boolean(p) && p !== rayanLast7);
-    let hit: { contactId: string; accountId: string } | null = null;
-    for (const l7 of candidates) {
-      const h = idx.get(l7);
+    const externalL7s = [u.from_number, u.to_number]
+      .map((p) => lastSeven(normalizePhone(p)))
+      .filter((p): p is string => Boolean(p) && !repLast7s.has(p!));
+    const email = u.p_email?.trim().toLowerCase() ?? "";
+    if (email.endsWith("@schoolconex.com")) continue;
+
+    let hit: Hit | null = null;
+    for (const l7 of externalL7s) {
+      const h = byPhone.get(l7);
       if (h) {
         hit = h;
         break;
       }
     }
+    if (!hit && email) hit = byEmail.get(email) ?? null;
+    if (!hit && u.p_name && u.p_name.trim().length >= 5) {
+      const byC = byContactName.get(u.p_name.trim().toLowerCase());
+      if (byC && byC !== "ambiguous") hit = byC;
+      if (!hit) {
+        const byA = byAccountName.get(normName(u.p_name));
+        if (byA && byA !== "ambiguous") hit = byA;
+      }
+      if (!hit) hit = containmentMatch(u.p_name);
+    }
     if (!hit) continue;
+
     await db
       .update(activities)
       .set({
@@ -221,8 +315,22 @@ async function rematchUnlinkedCalls(): Promise<number> {
         contactId: hit.contactId,
         updatedAt: new Date(),
       })
-      .where(eq(activities.id, u.activityId));
+      .where(eq(activities.id, u.activity_id));
     matched++;
+
+    // Backfill the contact's phone from the call so the next call matches fast.
+    if (hit.contactId && !hit.hasPhone && externalL7s.length > 0) {
+      const e164 = [u.from_number, u.to_number]
+        .map(normalizePhone)
+        .find((p) => p && lastSeven(p) === externalL7s[0]);
+      if (e164) {
+        await db
+          .update(contacts)
+          .set({ phone: e164, updatedAt: new Date() })
+          .where(and(eq(contacts.id, hit.contactId), isNull(contacts.phone)));
+        hit.hasPhone = true;
+      }
+    }
   }
   return matched;
 }

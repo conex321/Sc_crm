@@ -3,11 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 import { listPipelines, listStagesForPipeline, listOpportunitiesByPipeline } from "@/lib/crm/opportunities";
 import { PipelineBoard } from "@/components/crm/pipeline-board";
+import { requireUser } from "@/lib/auth/session";
 
 export default async function OpportunitiesPage(props: {
   searchParams: Promise<{ pipeline?: string }>;
 }) {
   const params = await props.searchParams;
+  const user = await requireUser();
   const pipelines = await listPipelines();
 
   const activePipeline =
@@ -66,7 +68,11 @@ export default async function OpportunitiesPage(props: {
         </div>
       </div>
 
-      <PipelineBoard stages={stages} initialOpportunities={opportunities} />
+      <PipelineBoard
+        stages={stages}
+        initialOpportunities={opportunities}
+        currentUserId={user.id}
+      />
     </div>
   );
 }

@@ -1,5 +1,13 @@
 import "server-only";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { db } from "@/lib/db";
+import { accounts, contacts, users } from "@/lib/db/schema";
+import { and, eq, isNull, like, or, sql } from "drizzle-orm";
+
+// All matchers query via the Drizzle service-role client, NOT the cookie-based
+// Supabase client: every caller is a cron route or event processor where no
+// user session exists, so an RLS-enforced client would see zero contact rows
+// and matching would silently never succeed (same trust model as
+// record-activity.ts — only verified-source integration code imports this).
 
 /**
  * Normalize a phone number to E.164 (best-effort) for matching.
@@ -24,11 +32,36 @@ export function lastSeven(phone: string | null | undefined): string | null {
   return d.length >= 7 ? d.slice(-7) : null;
 }
 
+/** Strip everything but [a-z0-9] — same normalizer as the QuickBooks importer. */
+export function normName(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
 export type ContactMatch = {
   contactId: string;
   accountId: string;
   fullName: string;
 };
+
+const contactCols = {
+  id: contacts.id,
+  accountId: contacts.accountId,
+  firstName: contacts.firstName,
+  lastName: contacts.lastName,
+};
+
+function toMatch(row: {
+  id: string;
+  accountId: string;
+  firstName: string;
+  lastName: string;
+}): ContactMatch {
+  return {
+    contactId: row.id,
+    accountId: row.accountId,
+    fullName: `${row.firstName} ${row.lastName}`,
+  };
+}
 
 /**
  * Match a phone number to a contact. Tries:
@@ -42,38 +75,32 @@ export async function matchPhoneToContact(
   const e164 = normalizePhone(phone);
   if (!e164) return null;
 
-  const sb = await getSupabaseServerClient();
-  const { data: exact } = await sb
-    .from("contacts")
-    .select("id, account_id, first_name, last_name")
-    .or(`phone.eq.${e164},whatsapp_phone.eq.${e164}`)
-    .is("deleted_at", null)
+  const exact = await db
+    .select(contactCols)
+    .from(contacts)
+    .where(
+      and(
+        isNull(contacts.deletedAt),
+        or(eq(contacts.phone, e164), eq(contacts.whatsappPhone, e164)),
+      ),
+    )
     .limit(1);
-  if (exact && exact.length > 0) {
-    return {
-      contactId: exact[0].id,
-      accountId: exact[0].account_id,
-      fullName: `${exact[0].first_name} ${exact[0].last_name}`,
-    };
-  }
+  if (exact[0]) return toMatch(exact[0]);
 
   const last7 = lastSeven(e164);
   if (!last7) return null;
 
-  const { data: fuzzy } = await sb
-    .from("contacts")
-    .select("id, account_id, first_name, last_name, phone, whatsapp_phone")
-    .or(`phone.like.%${last7},whatsapp_phone.like.%${last7}`)
-    .is("deleted_at", null)
+  const fuzzy = await db
+    .select(contactCols)
+    .from(contacts)
+    .where(
+      and(
+        isNull(contacts.deletedAt),
+        or(like(contacts.phone, `%${last7}`), like(contacts.whatsappPhone, `%${last7}`)),
+      ),
+    )
     .limit(1);
-  if (fuzzy && fuzzy.length > 0) {
-    return {
-      contactId: fuzzy[0].id,
-      accountId: fuzzy[0].account_id,
-      fullName: `${fuzzy[0].first_name} ${fuzzy[0].last_name}`,
-    };
-  }
-  return null;
+  return fuzzy[0] ? toMatch(fuzzy[0]) : null;
 }
 
 /**
@@ -85,19 +112,116 @@ export async function matchEmailToContact(
   const normalized = email.trim().toLowerCase();
   if (!normalized) return null;
 
-  const sb = await getSupabaseServerClient();
-  const { data } = await sb
-    .from("contacts")
-    .select("id, account_id, first_name, last_name")
-    .ilike("email", normalized)
-    .is("deleted_at", null)
+  const rows = await db
+    .select(contactCols)
+    .from(contacts)
+    .where(
+      and(isNull(contacts.deletedAt), sql`lower(${contacts.email}) = ${normalized}`),
+    )
     .limit(1);
-  if (data && data.length > 0) {
-    return {
-      contactId: data[0].id,
-      accountId: data[0].account_id,
-      fullName: `${data[0].first_name} ${data[0].last_name}`,
-    };
+  return rows[0] ? toMatch(rows[0]) : null;
+}
+
+export type IdentityMatch = {
+  accountId: string;
+  contactId: string | null;
+  matchedBy: "phone" | "email" | "contact_name" | "account_name";
+};
+
+/**
+ * Match a call/message counterparty by whatever identity Dialpad (or another
+ * provider) gave us, strongest signal first:
+ *   1. phone → matchPhoneToContact
+ *   2. email → matchEmailToContact (skipping internal @schoolconex.com)
+ *   3. contact full name — only when exactly ONE contact carries that name
+ *   4. account name (punctuation-insensitive) — only when exactly ONE account
+ * Name passes are unique-only to avoid false positives on common names.
+ */
+export async function matchIdentityToContact(identity: {
+  phone?: string | null;
+  email?: string | null;
+  name?: string | null;
+}): Promise<IdentityMatch | null> {
+  if (identity.phone) {
+    const m = await matchPhoneToContact(identity.phone);
+    if (m) return { accountId: m.accountId, contactId: m.contactId, matchedBy: "phone" };
   }
+
+  const email = identity.email?.trim().toLowerCase();
+  if (email && !email.endsWith("@schoolconex.com")) {
+    const m = await matchEmailToContact(email);
+    if (m) return { accountId: m.accountId, contactId: m.contactId, matchedBy: "email" };
+  }
+
+  const name = identity.name?.trim();
+  if (name && name.length >= 5) {
+    const byContact = await db
+      .select(contactCols)
+      .from(contacts)
+      .where(
+        and(
+          isNull(contacts.deletedAt),
+          sql`lower(${contacts.firstName} || ' ' || ${contacts.lastName}) = ${name.toLowerCase()}`,
+        ),
+      )
+      .limit(2);
+    if (byContact.length === 1) {
+      return {
+        accountId: byContact[0].accountId,
+        contactId: byContact[0].id,
+        matchedBy: "contact_name",
+      };
+    }
+
+    const normed = normName(name);
+    if (normed.length >= 6) {
+      const byAccount = await db
+        .select({ id: accounts.id })
+        .from(accounts)
+        .where(
+          and(
+            isNull(accounts.deletedAt),
+            sql`regexp_replace(lower(${accounts.name}), '[^a-z0-9]', '', 'g') = ${normed}`,
+          ),
+        )
+        .limit(2);
+      if (byAccount.length === 1) {
+        return { accountId: byAccount[0].id, contactId: null, matchedBy: "account_name" };
+      }
+    }
+  }
+
   return null;
+}
+
+/**
+ * Backfill a contact's phone from a live signal (e.g. the number a matched
+ * call came from) so future calls hit the fast phone path. Fills only when
+ * the contact has no phone yet, and never with a rep's own line.
+ */
+export async function stampContactPhoneIfEmpty(
+  contactId: string,
+  phone: string | null | undefined,
+): Promise<boolean> {
+  const e164 = normalizePhone(phone);
+  if (!e164) return false;
+  const l7 = lastSeven(e164);
+
+  const repRows = await db
+    .select({ dialpadPhone: users.dialpadPhone })
+    .from(users)
+    .where(sql`${users.dialpadPhone} is not null`);
+  const repLines = new Set(
+    [...repRows.map((r) => r.dialpadPhone), process.env.DIALPAD_FILTER_USER_PHONE]
+      .map((p) => lastSeven(p))
+      .filter(Boolean),
+  );
+  if (l7 && repLines.has(l7)) return false;
+
+  const updated = await db
+    .update(contacts)
+    .set({ phone: e164, updatedAt: new Date() })
+    .where(and(eq(contacts.id, contactId), isNull(contacts.phone)))
+    .returning({ id: contacts.id });
+  return updated.length > 0;
 }

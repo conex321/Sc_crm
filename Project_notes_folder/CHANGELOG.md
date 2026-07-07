@@ -430,3 +430,12 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - files_changed: [scripts/quickbooks-build-canonical.mts (new), scripts/quickbooks-import-customers.mts (new), supabase/migrations/0009_quickbooks_customers.sql (new), lib/db/schema.ts, lib/crm/accounts.ts, app/(dashboard)/accounts/page.tsx, app/(dashboard)/accounts/[id]/page.tsx, components/crm/customer-status-badge.tsx (new), package.json, .gitignore, Project_notes_folder/*]
 - db: migration 0009 applied to prod (ooanslwrwjexdjwdphes); 72 customer accounts + 45 contacts imported from live QuickBooks+Stripe
 - next: decide reps-see-revenue or not; commit + deploy when Matthew asks; Matthew+Rayan connect Gmail
+
+## 2026-07-06T20:30Z — Claude
+- session: sessions/2026-07-06-crm-visibility-upgrade.md
+- decisions_added: [D-042]
+- failures_added: []
+- files_changed: [lib/crm/dashboard.ts, lib/integrations/contact-matcher.ts, lib/integrations/auto-pipeline.ts, lib/integrations/dialpad.ts, lib/integrations/mailshake-events.ts, lib/integrations/slack-notify.ts, lib/integrations/digest.ts, lib/integrations/mailer.ts, app/(dashboard)/dashboard/page.tsx, app/(dashboard)/opportunities/page.tsx, components/crm/pipeline-board.tsx, app/(dashboard)/settings/integrations/page.tsx, app/(dashboard)/campaigns/page.tsx, app/api/cron/dialpad-sync/route.ts, app/api/cron/mailshake-sync/route.ts, app/api/cron/daily-digest/route.ts, app/api/webhooks/mailshake/route.ts, app/api/leads/website/route.ts, inngest/functions/dialpad-process-event.ts, inngest/functions/dialpad-sync-rayan.ts, inngest/functions/mailshake-process-event.ts, lib/supabase/middleware.ts, supabase/migrations/0010_followup_view.sql, scripts/dialpad-rematch-identity.mts, scripts/assign-customer-owners.mts, scripts/purge-demo-data.mts, docs/website-lead-form.md, vercel.json, package.json]
+- db_changes: [migration 0010 applied (followup_leads view + index); 72 customer accounts owner->Rayan; demo seed rows purged; 6 calls re-matched]
+- verified: [tsc, next build, e2e 13/13 routes, website endpoint smoke (auth/honeypot/create/dedupe + side-effects, cleaned up), mailshake webhook inline processing (cleaned up), daily-digest ?dry=1]
+- next: commit + deploy on Matthew's go; set activation env (MAILSHAKE_WEBHOOK_SECRET+register, SLACK_WEBHOOK_URL, SMTP_USER/PASS, WEBSITE_LEAD_TOKEN); Matthew+Rayan connect Gmail

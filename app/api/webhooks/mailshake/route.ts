@@ -5,6 +5,7 @@ import {
   extractMailshakeEvent,
   verifyMailshakeSignature,
 } from "@/lib/integrations/mailshake";
+import { processMailshakeRawEvent } from "@/lib/integrations/mailshake-events";
 import { inngest } from "@/inngest/client";
 
 export const runtime = "nodejs";
@@ -42,11 +43,24 @@ export async function POST(request: NextRequest) {
     .returning({ id: integrationEventsRaw.id });
 
   if (inserted.length > 0) {
-    await inngest.send({
-      name: "mailshake/event.received",
-      data: { rawEventId: inserted[0].id },
-    });
+    // Process inline — production has no Inngest keys, so this is the path that
+    // actually runs; the daily cron sweeper self-heals anything that throws.
+    // Best-effort: never fail the webhook (Mailshake would retry the whole POST).
+    let matched = false;
+    try {
+      const r = await processMailshakeRawEvent(inserted[0].id);
+      matched = r.matched;
+    } catch {
+      // leave unprocessed for the sweeper
+    }
+    // Keep the Inngest emit for local dev where INNGEST_DEV is set.
+    if (process.env.INNGEST_DEV) {
+      await inngest
+        .send({ name: "mailshake/event.received", data: { rawEventId: inserted[0].id } })
+        .catch(() => {});
+    }
+    return NextResponse.json({ ok: true, matched });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, duplicate: true });
 }

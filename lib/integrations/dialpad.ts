@@ -26,7 +26,7 @@ export type DialpadCallEvent = {
   call_id: string;
   event_type: string;
   direction: "inbound" | "outbound";
-  contact?: { phone?: string };
+  contact?: { phone?: string; email?: string; name?: string };
   external_number?: string;
   internal_number?: string;
   duration?: number;
@@ -49,7 +49,7 @@ export function extractCallEvent(payload: unknown): DialpadCallEvent | null {
     call_id: callId,
     event_type: (p.event_type as string) ?? "call_completed",
     direction,
-    contact: p.contact as { phone?: string } | undefined,
+    contact: p.contact as { phone?: string; email?: string; name?: string } | undefined,
     external_number: (p.external_number as string) ?? (direction === "inbound" ? from : to),
     internal_number: (p.internal_number as string) ?? (direction === "inbound" ? to : from),
     duration: typeof p.duration === "number" ? (p.duration as number) : undefined,

@@ -7,11 +7,15 @@
 - `.claude/skills/update-project-notes/SKILL.md` + `.codex/skills/update-project-notes/SKILL.md` — auto-invoked notes skill
 - `docs/superpowers/specs/2026-05-06-schoolconex-crm-design.md` — final design spec, source of truth
 - `app/`, `components/`, `lib/`, `inngest/`, `supabase/migrations/` — main app code (see spec for layout)
+- D-042 additions: `lib/crm/dashboard.ts` (RLS-scoped dashboard queries), `lib/integrations/{mailshake-events,slack-notify,digest,mailer}.ts`, `app/api/cron/daily-digest/route.ts`, `app/api/leads/website/route.ts`, `supabase/migrations/0010_followup_view.sql` (`followup_leads` view), `docs/website-lead-form.md` (web-team lead-form snippet)
 - `scripts/` — operational scripts:
   - `apply-sql.mts` / `run-demo-user.mts` / `run-rayan-user.mts` / `remove-rayan-user.mts` — DB ops
   - `dialpad-{lookup-user,list-calls,backfill}.mts` — Dialpad ops (`npm run dialpad:*`)
   - `quickbooks-build-canonical.mts` (`npm run quickbooks:build-canonical`) — dedupe + classify the QBO/Stripe export → `.quickbooks/qbo-canonical.json`
   - `quickbooks-import-customers.mts` (`npm run quickbooks:import [-- --dry]`) — idempotent upsert of customers into accounts+contacts (D-041)
+  - `dialpad-rematch-identity.mts` (`npm run dialpad:rematch-identity [-- --dry]`) — re-link unmatched calls by raw-payload identity (phone→email→name+containment), handles both JSON payload shapes, backfills contact phones (D-042)
+  - `assign-customer-owners.mts` (`npm run customers:assign-owners [-- --dry] [--owner email]`) — assign unowned `customer_status` accounts to an owner (default Rayan) (D-042)
+  - `purge-demo-data.mts` (`npm run demo:purge [-- --dry] [--force]`) — soft/hard-delete the `0002_demo_data.sql` seed rows by fixed UUID (D-042)
   - `export-customers-crm.mjs` — the read-only QBO+Stripe pull run **on the prod finance server** over SSH (kept in scratchpad, not the repo tree; token owner = Hetzner `schoolconex-finance`)
   - `check-calls.mts` — DB inspection
   - `e2e-rayan.mts` + `e2e-inbox-check.mts` — programmatic e2e auth + render tests

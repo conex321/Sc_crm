@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { syncAllCampaigns } from "@/lib/integrations/mailshake-sync";
 import { runAutoPipeline } from "@/lib/integrations/auto-pipeline";
+import { sweepUnprocessedMailshakeEvents } from "@/lib/integrations/mailshake-events";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
   try {
     const result = await syncAllCampaigns();
     const auto = await runAutoPipeline();
+    const sweptEvents = await sweepUnprocessedMailshakeEvents();
     return NextResponse.json({
       ok: true,
       campaigns: result.campaigns.upserted,
@@ -37,6 +39,7 @@ export async function GET(req: NextRequest) {
       matchedAccount: result.leads.matchedAccount,
       matchedContact: result.leads.matchedContact,
       auto,
+      sweptEvents,
       ranAt: new Date().toISOString(),
     });
   } catch (err) {

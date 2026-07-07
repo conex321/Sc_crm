@@ -81,9 +81,9 @@ export default async function IntegrationsPage(props: {
               )}
             </div>
             <CardDescription className="text-xs">
-              Account-level API key syncs all campaigns + per-lead status every 30 min.
-              Recipients are matched to CRM accounts by email or by Mailshake&apos;s
-              <code className="mx-1">account</code>field.
+              Account-level API key syncs all campaigns + per-lead status daily
+              (08:00 UTC). Recipients are matched to CRM accounts by email or by
+              Mailshake&apos;s<code className="mx-1">account</code>field.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
