@@ -75,12 +75,13 @@ export function AccountForm({
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="ownerUserId">Owner</Label>
-          <Select name="ownerUserId" defaultValue={defaultValues?.ownerUserId ?? ""}>
+          {/* Radix Select throws on empty-string item values — use a sentinel. */}
+          <Select name="ownerUserId" defaultValue={defaultValues?.ownerUserId || "unassigned"}>
             <SelectTrigger id="ownerUserId">
               <SelectValue placeholder="Unassigned" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Unassigned</SelectItem>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.full_name}

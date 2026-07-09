@@ -101,16 +101,17 @@ export function OpportunityForm({
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="primaryContactId">Primary contact</Label>
+          {/* Radix Select throws on empty-string item values — use a sentinel. */}
           <Select
             name="primaryContactId"
-            defaultValue={defaults?.primaryContactId ?? ""}
+            defaultValue={defaults?.primaryContactId || "none"}
             disabled={!accountId}
           >
             <SelectTrigger id="primaryContactId">
               <SelectValue placeholder="None" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">None</SelectItem>
+              <SelectItem value="none">None</SelectItem>
               {contacts.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.first_name} {c.last_name}
@@ -189,12 +190,12 @@ export function OpportunityForm({
       </div>
       <div className="grid gap-1.5">
         <Label htmlFor="ownerUserId">Owner</Label>
-        <Select name="ownerUserId" defaultValue={defaults?.ownerUserId ?? ""}>
+        <Select name="ownerUserId" defaultValue={defaults?.ownerUserId || "unassigned"}>
           <SelectTrigger id="ownerUserId">
             <SelectValue placeholder="Unassigned" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Unassigned</SelectItem>
+            <SelectItem value="unassigned">Unassigned</SelectItem>
             {users.map((u) => (
               <SelectItem key={u.id} value={u.id}>
                 {u.full_name}

@@ -14,8 +14,14 @@ const accountSchema = z.object({
   phone: z.string().trim().max(50).optional(),
   country: z.string().trim().max(100).optional(),
   source: z.string().trim().max(100).optional(),
-  ownerUserId: z.string().uuid().or(z.literal("")).optional(),
+  // "unassigned" is the form's sentinel for no owner (Radix Select can't
+  // represent an empty-string item value).
+  ownerUserId: z.string().uuid().or(z.enum(["", "unassigned"])).optional(),
 });
+
+function ownerOrNull(v: string | undefined): string | null {
+  return v && v !== "unassigned" ? v : null;
+}
 
 function fromForm(form: FormData) {
   return {
@@ -45,7 +51,7 @@ export async function createAccount(form: FormData) {
       phone: parsed.phone || null,
       country: parsed.country || null,
       source: parsed.source || null,
-      owner_user_id: parsed.ownerUserId || user.id,
+      owner_user_id: ownerOrNull(parsed.ownerUserId) ?? user.id,
       created_by: user.id,
       updated_by: user.id,
     })
@@ -62,7 +68,7 @@ export async function updateAccount(id: string, form: FormData) {
   const parsed = accountSchema.parse(fromForm(form));
 
   const sb = await getSupabaseServerClient();
-  const { error } = await sb
+  const { data, error } = await sb
     .from("accounts")
     .update({
       name: parsed.name,
@@ -72,12 +78,17 @@ export async function updateAccount(id: string, form: FormData) {
       phone: parsed.phone || null,
       country: parsed.country || null,
       source: parsed.source || null,
-      owner_user_id: parsed.ownerUserId || null,
+      owner_user_id: ownerOrNull(parsed.ownerUserId),
       updated_by: user.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
 
   if (error) throw new Error(error.message);
+  // RLS filtering to 0 rows would otherwise look like a successful save.
+  if (!data || data.length === 0) {
+    throw new Error("Account not found or you don't have permission to edit it.");
+  }
   revalidatePath(`/accounts/${id}`);
   revalidatePath("/accounts");
   redirect(`/accounts/${id}`);

@@ -14,9 +14,15 @@ const opportunitySchema = z.object({
   amount: z.string().optional(),
   currency: z.string().trim().min(3).max(3).default("USD"),
   expectedCloseDate: z.string().optional(),
-  primaryContactId: z.string().uuid().or(z.literal("")).optional(),
-  ownerUserId: z.string().uuid().or(z.literal("")).optional(),
+  // "none"/"unassigned" are the form's sentinels for no selection (Radix
+  // Select can't represent an empty-string item value).
+  primaryContactId: z.string().uuid().or(z.enum(["", "none"])).optional(),
+  ownerUserId: z.string().uuid().or(z.enum(["", "unassigned"])).optional(),
 });
+
+function idOrNull(v: string | undefined): string | null {
+  return v && v !== "none" && v !== "unassigned" ? v : null;
+}
 
 function fromForm(form: FormData) {
   return {
@@ -47,8 +53,8 @@ export async function createOpportunity(form: FormData) {
       amount: parsed.amount ? Number(parsed.amount) : null,
       currency: parsed.currency,
       expected_close_date: parsed.expectedCloseDate || null,
-      primary_contact_id: parsed.primaryContactId || null,
-      owner_user_id: parsed.ownerUserId || user.id,
+      primary_contact_id: idOrNull(parsed.primaryContactId),
+      owner_user_id: idOrNull(parsed.ownerUserId) ?? user.id,
       created_by: user.id,
       updated_by: user.id,
     })
@@ -64,7 +70,7 @@ export async function updateOpportunity(id: string, form: FormData) {
   const user = await requireUser();
   const parsed = opportunitySchema.parse(fromForm(form));
   const sb = await getSupabaseServerClient();
-  const { error } = await sb
+  const { data, error } = await sb
     .from("opportunities")
     .update({
       account_id: parsed.accountId,
@@ -74,12 +80,17 @@ export async function updateOpportunity(id: string, form: FormData) {
       amount: parsed.amount ? Number(parsed.amount) : null,
       currency: parsed.currency,
       expected_close_date: parsed.expectedCloseDate || null,
-      primary_contact_id: parsed.primaryContactId || null,
-      owner_user_id: parsed.ownerUserId || null,
+      primary_contact_id: idOrNull(parsed.primaryContactId),
+      owner_user_id: idOrNull(parsed.ownerUserId),
       updated_by: user.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id");
   if (error) throw new Error(error.message);
+  // RLS filtering to 0 rows would otherwise look like a successful save.
+  if (!data || data.length === 0) {
+    throw new Error("Opportunity not found or you don't have permission to edit it.");
+  }
   revalidatePath(`/opportunities/${id}`);
   revalidatePath("/opportunities");
   redirect(`/opportunities/${id}`);

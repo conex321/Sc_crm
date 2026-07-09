@@ -65,7 +65,9 @@ const ROUTES: RouteCheck[] = [
   { path: "/login", expectStatus: 307, expectLocation: /\/accounts/ },
   { path: "/", expectStatus: 307 }, // redirects to /accounts
   { path: "/accounts", expectBody: [/Accounts/, /SchoolConex/i] },
-  { path: "/dashboard", expectBody: [/Active accounts|Open opportunities|Pipeline/] },
+  { path: "/accounts/new", expectBody: [/Account name/, /Owner/] },
+  { path: "/opportunities/new", expectBody: [/Pipeline|Stage/, /Owner/] },
+  { path: "/dashboard", expectBody: [/Follow-up|Open leads|pipeline/i] },
   { path: "/opportunities", expectBody: [/Opportunit/i] },
   { path: "/inbox", expectBody: [/Inbound|Outbound|call/] },
   { path: "/settings", expectStatus: 307, expectLocation: /\/settings\/users/ },
@@ -118,9 +120,26 @@ async function main() {
   console.log(`✓ session for user_id=${session.user.id}`);
   const cookie = buildAuthCookie(session);
 
-  console.log(`\nWalking ${ROUTES.length} routes against ${SITE}\n`);
+  // Discover a real account id from the list page so we can walk the edit
+  // form too (the Radix empty-value crash of D-043 lived there).
+  const listRes = await fetch(`${SITE}/accounts`, { headers: { Cookie: cookie } });
+  const listHtml = await listRes.text();
+  const accountId = listHtml.match(
+    /\/accounts\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/,
+  )?.[1];
+  const routes: RouteCheck[] = [...ROUTES];
+  if (accountId) {
+    routes.push({
+      path: `/accounts/${accountId}/edit`,
+      expectBody: [/Account name/, /Owner/, /Save changes/],
+    });
+  } else {
+    console.log("⚠ no account id found on /accounts — skipping edit-form check");
+  }
+
+  console.log(`\nWalking ${routes.length} routes against ${SITE}\n`);
   const results = [];
-  for (const route of ROUTES) {
+  for (const route of routes) {
     results.push(await fetchRoute(cookie, route));
   }
 
