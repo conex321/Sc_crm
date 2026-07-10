@@ -71,7 +71,7 @@ export async function updateContact(
       .neq("id", contactId);
   }
 
-  const { error } = await sb
+  const { data, error } = await sb
     .from("contacts")
     .update({
       first_name: parsed.firstName,
@@ -83,8 +83,13 @@ export async function updateContact(
       is_primary: parsed.isPrimary ?? false,
       updated_by: user.id,
     })
-    .eq("id", contactId);
+    .eq("id", contactId)
+    .select("id");
   if (error) throw new Error(error.message);
+  // RLS filtering to 0 rows would otherwise look like a successful save.
+  if (!data || data.length === 0) {
+    throw new Error("Contact not found or you don't have permission to edit it.");
+  }
   revalidatePath(`/accounts/${accountId}`);
   redirect(`/accounts/${accountId}`);
 }

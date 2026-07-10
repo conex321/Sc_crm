@@ -133,6 +133,10 @@ async function main() {
       path: `/accounts/${accountId}/edit`,
       expectBody: [/Account name/, /Owner/, /Save changes/],
     });
+    routes.push({
+      path: `/accounts/${accountId}/contacts/new`,
+      expectBody: [/First name|first_name|Contact/i, /Save|Create/i],
+    });
   } else {
     console.log("⚠ no account id found on /accounts — skipping edit-form check");
   }
