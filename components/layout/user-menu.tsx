@@ -1,3 +1,6 @@
+"use client";
+
+import { useTheme } from "next-themes";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { LogOut } from "lucide-react";
+import { Check, LogOut, Monitor, Moon, Sun } from "lucide-react";
 import type { SessionUser } from "@/lib/auth/session";
 
 function initials(name: string) {
@@ -21,7 +24,15 @@ function initials(name: string) {
     .join("");
 }
 
+const THEME_OPTIONS = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "System", icon: Monitor },
+] as const;
+
 export function UserMenu({ user }: { user: SessionUser }) {
+  const { theme, setTheme } = useTheme();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -42,6 +53,21 @@ export function UserMenu({ user }: { user: SessionUser }) {
             {user.role}
           </Badge>
         </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+          Theme
+        </DropdownMenuLabel>
+        {THEME_OPTIONS.map((option) => (
+          <DropdownMenuItem
+            key={option.value}
+            onClick={() => setTheme(option.value)}
+            className="cursor-pointer"
+          >
+            <option.icon className="size-4" />
+            <span>{option.label}</span>
+            {theme === option.value && <Check className="ml-auto size-4" />}
+          </DropdownMenuItem>
+        ))}
         <DropdownMenuSeparator />
         <form action="/auth/sign-out" method="post">
           <DropdownMenuItem asChild>
