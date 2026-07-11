@@ -11,12 +11,7 @@ import {
   updateLineItem,
   deleteLineItem,
 } from "@/app/(dashboard)/opportunities/[id]/line-items/actions";
-
-const formatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+import { fmtCad } from "@/lib/format";
 
 type Product = { id: string; sku: string; name: string; list_price: string };
 type Package = { id: string; name: string; list_price: string | null };
@@ -91,26 +86,27 @@ export function LineItemsEditor({
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center justify-between text-sm">
           <span>Line items</span>
-          <span className="text-xs font-normal text-muted-foreground">
-            Total · <span className="font-semibold text-foreground">{formatter.format(total)}</span>
+          <span className="text-muted-foreground text-xs font-normal">
+            Total ·{" "}
+            <span className="text-foreground font-semibold tabular-nums">{fmtCad(total)}</span>
           </span>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {lineItems.length === 0 ? (
-          <p className="rounded border border-dashed p-3 text-center text-xs text-muted-foreground">
+          <p className="text-muted-foreground rounded border border-dashed p-3 text-center text-xs">
             No line items yet. Add a product or package below.
           </p>
         ) : (
           <div className="overflow-hidden rounded-md border">
             <table className="w-full text-xs">
-              <thead className="bg-muted/40 text-left text-[11px] uppercase text-muted-foreground">
+              <thead className="bg-muted/40 text-muted-foreground text-left text-[11px] uppercase">
                 <tr>
                   <th className="px-3 py-2 font-medium">Item</th>
                   <th className="px-3 py-2 font-medium">Qty</th>
                   <th className="px-3 py-2 font-medium">Unit price</th>
                   <th className="px-3 py-2 font-medium">Discount %</th>
-                  <th className="px-3 py-2 font-medium text-right">Subtotal</th>
+                  <th className="px-3 py-2 text-right font-medium">Subtotal</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -165,9 +161,7 @@ export function LineItemsEditor({
                         />
                       </form>
                     </td>
-                    <td className="text-right font-medium">
-                      {formatter.format(subtotal(li))}
-                    </td>
+                    <td className="text-right font-medium tabular-nums">{fmtCad(subtotal(li))}</td>
                     <td className="text-right">
                       <Button
                         type="button"
@@ -187,20 +181,23 @@ export function LineItemsEditor({
           </div>
         )}
 
-        <form action={onAdd} className="grid grid-cols-[120px_1fr_70px_120px_70px_auto] items-end gap-2">
+        <form
+          action={onAdd}
+          className="grid grid-cols-[120px_1fr_70px_120px_70px_auto] items-end gap-2"
+        >
           <div className="grid gap-1">
-            <span className="text-[10px] uppercase text-muted-foreground">Source</span>
+            <span className="text-muted-foreground text-[10px] uppercase">Source</span>
             <select
               value={source}
               onChange={(e) => setSource(e.target.value as "product" | "package")}
-              className="h-8 rounded-md border bg-background px-2 text-xs"
+              className="bg-background h-8 rounded-md border px-2 text-xs"
             >
               <option value="product">Product</option>
               <option value="package">Package</option>
             </select>
           </div>
           <div className="grid gap-1">
-            <span className="text-[10px] uppercase text-muted-foreground">
+            <span className="text-muted-foreground text-[10px] uppercase">
               {source === "product" ? "Product" : "Package"}
             </span>
             {source === "product" ? (
@@ -214,7 +211,7 @@ export function LineItemsEditor({
                     | undefined;
                   if (product && priceInput) priceInput.value = product.list_price;
                 }}
-                className="h-8 rounded-md border bg-background px-2 text-xs"
+                className="bg-background h-8 rounded-md border px-2 text-xs"
               >
                 <option value="">Pick…</option>
                 {products.map((p) => (
@@ -234,7 +231,7 @@ export function LineItemsEditor({
                     | undefined;
                   if (pkg?.list_price && priceInput) priceInput.value = pkg.list_price;
                 }}
-                className="h-8 rounded-md border bg-background px-2 text-xs"
+                className="bg-background h-8 rounded-md border px-2 text-xs"
               >
                 <option value="">Pick…</option>
                 {packages.map((p) => (
@@ -246,23 +243,30 @@ export function LineItemsEditor({
             )}
           </div>
           <div className="grid gap-1">
-            <span className="text-[10px] uppercase text-muted-foreground">Qty</span>
+            <span className="text-muted-foreground text-[10px] uppercase">Qty</span>
             <Input name="quantity" type="number" min={1} defaultValue={1} className="h-8 text-xs" />
           </div>
           <div className="grid gap-1">
-            <span className="text-[10px] uppercase text-muted-foreground">Unit price</span>
+            <span className="text-muted-foreground text-[10px] uppercase">Unit price</span>
             <Input name="unitPrice" type="number" step="0.01" required className="h-8 text-xs" />
           </div>
           <div className="grid gap-1">
-            <span className="text-[10px] uppercase text-muted-foreground">Disc %</span>
-            <Input name="discountPct" type="number" min={0} max={100} defaultValue={0} className="h-8 text-xs" />
+            <span className="text-muted-foreground text-[10px] uppercase">Disc %</span>
+            <Input
+              name="discountPct"
+              type="number"
+              min={0}
+              max={100}
+              defaultValue={0}
+              className="h-8 text-xs"
+            />
           </div>
           <Button type="submit" size="sm" disabled={pending}>
             <Plus className="size-3.5" /> Add
           </Button>
         </form>
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-muted-foreground text-[11px]">
           Opportunity amount auto-syncs from the line-item total via DB trigger.
         </p>
       </CardContent>

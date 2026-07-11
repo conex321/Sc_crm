@@ -19,17 +19,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { moveOpportunityStage } from "@/app/(dashboard)/opportunities/actions";
 import type { OpportunityWithRefs } from "@/lib/crm/opportunities";
-
-// Amounts can carry per-opportunity currencies; format each in its own.
-// CAD is the house currency (QuickBooks), so it's the default/fallback.
-function fmtMoney(amount: number, currency = "CAD"): string {
-  const locale = currency === "USD" ? "en-US" : "en-CA";
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
+import { fmtMoney } from "@/lib/format";
 
 /** Sum a set of opps, grouping by currency, and render "CA$X + US$Y". */
 function sumByCurrency(opps: OpportunityWithRefs[], weighted = false, stages?: Stage[]): string {

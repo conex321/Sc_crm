@@ -6,12 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus } from "lucide-react";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-
-const formatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+import { fmtMoney } from "@/lib/format";
 
 export default async function CatalogPage() {
   await requireRole(["admin"]);
@@ -26,9 +21,7 @@ export default async function CatalogPage() {
       .from("packages")
       .select("id, name, description, list_price, currency, is_active")
       .order("name"),
-    sb
-      .from("package_items")
-      .select("package_id, product_id, quantity"),
+    sb.from("package_items").select("package_id, product_id, quantity"),
   ]);
 
   const productsByCategory = new Map<string, typeof productsRes.data>();
@@ -39,7 +32,10 @@ export default async function CatalogPage() {
   }
   const itemCountByPackage = new Map<string, number>();
   for (const item of packageItemsRes.data ?? []) {
-    itemCountByPackage.set(item.package_id, (itemCountByPackage.get(item.package_id) ?? 0) + item.quantity);
+    itemCountByPackage.set(
+      item.package_id,
+      (itemCountByPackage.get(item.package_id) ?? 0) + item.quantity,
+    );
   }
 
   return (
@@ -47,9 +43,9 @@ export default async function CatalogPage() {
       <div className="mb-4 flex items-start justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Catalog</h1>
-          <p className="text-xs text-muted-foreground">
-            Products are the 70+ courses + service tiers. Packages bundle products.
-            Both feed the line-item quote editor on opportunities.
+          <p className="text-muted-foreground text-xs">
+            Products are the 70+ courses + service tiers. Packages bundle products. Both feed the
+            line-item quote editor on opportunities.
           </p>
         </div>
         <div className="flex gap-2">
@@ -66,18 +62,18 @@ export default async function CatalogPage() {
         </div>
       </div>
 
-      <h2 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+      <h2 className="text-muted-foreground mb-2 text-xs font-semibold uppercase">
         Products ({productsRes.data?.length ?? 0})
       </h2>
       <div className="mb-6 space-y-4">
         {[...productsByCategory.entries()].map(([cat, items]) => (
           <div key={cat}>
-            <h3 className="mb-1 text-[11px] font-medium uppercase text-muted-foreground">
+            <h3 className="text-muted-foreground mb-1 text-[11px] font-medium uppercase">
               {cat.replace("_", " ")}
             </h3>
             <div className="overflow-hidden rounded-md border">
               <table className="w-full text-xs">
-                <thead className="bg-muted/40 text-left text-[11px] uppercase text-muted-foreground">
+                <thead className="bg-muted/40 text-muted-foreground text-left text-[11px] uppercase">
                   <tr>
                     <th className="px-3 py-2 font-medium">SKU</th>
                     <th className="px-3 py-2 font-medium">Name</th>
@@ -92,7 +88,7 @@ export default async function CatalogPage() {
                     <tr key={p.id} className="border-t [&_td]:px-3 [&_td]:py-2">
                       <td className="font-mono text-[11px]">{p.sku}</td>
                       <td className="font-medium">{p.name}</td>
-                      <td>{formatter.format(Number(p.list_price))}</td>
+                      <td className="tabular-nums">{fmtMoney(Number(p.list_price), p.currency)}</td>
                       <td className="text-muted-foreground capitalize">
                         {p.billing_period.replace("_", " ")}
                       </td>
@@ -114,13 +110,13 @@ export default async function CatalogPage() {
           </div>
         ))}
         {(productsRes.data ?? []).length === 0 && (
-          <div className="rounded border border-dashed p-6 text-center text-xs text-muted-foreground">
+          <div className="text-muted-foreground rounded border border-dashed p-6 text-center text-xs">
             No products yet.
           </div>
         )}
       </div>
 
-      <h2 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+      <h2 className="text-muted-foreground mb-2 text-xs font-semibold uppercase">
         Packages ({packagesRes.data?.length ?? 0})
       </h2>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -138,13 +134,11 @@ export default async function CatalogPage() {
                   {pkg.is_active ? "active" : "disabled"}
                 </Badge>
               </div>
-              {pkg.description && (
-                <p className="text-muted-foreground">{pkg.description}</p>
-              )}
-              <div className="flex items-center justify-between text-muted-foreground">
+              {pkg.description && <p className="text-muted-foreground">{pkg.description}</p>}
+              <div className="text-muted-foreground flex items-center justify-between">
                 <span>{itemCountByPackage.get(pkg.id) ?? 0} items</span>
-                <span className="font-medium text-foreground">
-                  {pkg.list_price ? formatter.format(Number(pkg.list_price)) : "—"}
+                <span className="text-foreground font-medium tabular-nums">
+                  {pkg.list_price ? fmtMoney(Number(pkg.list_price), pkg.currency) : "—"}
                 </span>
               </div>
             </CardContent>

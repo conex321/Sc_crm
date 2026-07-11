@@ -6,23 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Trash2 } from "lucide-react";
-import {
-  updatePackage,
-  setPackageItem,
-  removePackageItem,
-} from "../../../actions";
+import { updatePackage, setPackageItem, removePackageItem } from "../../../actions";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { fmtCad } from "@/lib/format";
 
-const formatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-export default async function EditPackagePage(props: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function EditPackagePage(props: { params: Promise<{ id: string }> }) {
   await requireRole(["admin"]);
   const { id } = await props.params;
   const sb = await getSupabaseServerClient();
@@ -79,12 +68,7 @@ export default async function EditPackagePage(props: {
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="currency">Currency</Label>
-                  <Input
-                    id="currency"
-                    name="currency"
-                    maxLength={3}
-                    defaultValue={pkg.currency}
-                  />
+                  <Input id="currency" name="currency" maxLength={3} defaultValue={pkg.currency} />
                 </div>
               </div>
               <label className="flex items-center gap-2 text-xs">
@@ -109,7 +93,7 @@ export default async function EditPackagePage(props: {
           </CardHeader>
           <CardContent className="space-y-3">
             {items.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No items yet.</p>
+              <p className="text-muted-foreground text-xs">No items yet.</p>
             ) : (
               <ul className="space-y-1">
                 {items.map((it) => {
@@ -117,7 +101,7 @@ export default async function EditPackagePage(props: {
                   return (
                     <li
                       key={it.id}
-                      className="flex items-center justify-between rounded border bg-muted/20 px-2 py-1.5 text-xs"
+                      className="bg-muted/20 flex items-center justify-between rounded border px-2 py-1.5 text-xs"
                     >
                       <div>
                         <span className="font-medium">{prod?.name ?? "—"}</span>{" "}
@@ -126,10 +110,8 @@ export default async function EditPackagePage(props: {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">
-                          {prod?.list_price
-                            ? formatter.format(Number(prod.list_price) * it.quantity)
-                            : "—"}
+                        <span className="text-muted-foreground tabular-nums">
+                          {prod?.list_price ? fmtCad(Number(prod.list_price) * it.quantity) : "—"}
                         </span>
                         <form
                           action={async () => {
@@ -148,7 +130,10 @@ export default async function EditPackagePage(props: {
               </ul>
             )}
 
-            <form action={setPackageItem} className="grid grid-cols-[1fr_80px_auto] items-end gap-2 pt-2">
+            <form
+              action={setPackageItem}
+              className="grid grid-cols-[1fr_80px_auto] items-end gap-2 pt-2"
+            >
               <input type="hidden" name="packageId" value={id} />
               <div className="grid gap-1.5">
                 <Label htmlFor="productId" className="text-[11px]">
@@ -158,12 +143,12 @@ export default async function EditPackagePage(props: {
                   id="productId"
                   name="productId"
                   required
-                  className="h-8 rounded-md border bg-background px-2 text-xs"
+                  className="bg-background h-8 rounded-md border px-2 text-xs"
                 >
                   <option value="">Pick a product…</option>
                   {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.sku} · {p.name} · {formatter.format(Number(p.list_price))}
+                      {p.sku} · {p.name} · {fmtCad(Number(p.list_price))}
                     </option>
                   ))}
                 </select>

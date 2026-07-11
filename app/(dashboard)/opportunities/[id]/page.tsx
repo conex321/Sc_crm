@@ -14,16 +14,9 @@ import { LineItemsEditor, type LineItem } from "@/components/crm/line-items-edit
 import { SendInvoiceButton } from "@/components/crm/send-invoice-button";
 import { requireUser } from "@/lib/auth/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { fmtMoney } from "@/lib/format";
 
-const formatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
-
-export default async function OpportunityDetailPage(props: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function OpportunityDetailPage(props: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   const { id } = await props.params;
   const opp = await getOpportunity(id);
@@ -38,16 +31,8 @@ export default async function OpportunityDetailPage(props: {
       )
       .eq("opportunity_id", id)
       .order("position"),
-    sb
-      .from("products")
-      .select("id, sku, name, list_price")
-      .eq("is_active", true)
-      .order("name"),
-    sb
-      .from("packages")
-      .select("id, name, list_price")
-      .eq("is_active", true)
-      .order("name"),
+    sb.from("products").select("id, sku, name, list_price").eq("is_active", true).order("name"),
+    sb.from("packages").select("id, name, list_price").eq("is_active", true).order("name"),
   ]);
 
   const lineItems: LineItem[] = (lineItemsRes.data ?? []).map((li) => ({
@@ -65,7 +50,7 @@ export default async function OpportunityDetailPage(props: {
     <div className="px-6 py-5">
       <div className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <div className="text-xs text-muted-foreground">
+          <div className="text-muted-foreground text-xs">
             {opp.account?.name && (
               <Link href={`/accounts/${opp.account_id}`} className="hover:underline">
                 {opp.account.name}
@@ -79,20 +64,14 @@ export default async function OpportunityDetailPage(props: {
             <Badge variant="secondary">{opp.stage?.name}</Badge>
             <Badge
               variant={
-                opp.status === "won"
-                  ? "default"
-                  : opp.status === "lost"
-                    ? "destructive"
-                    : "outline"
+                opp.status === "won" ? "default" : opp.status === "lost" ? "destructive" : "outline"
               }
               className="capitalize"
             >
               {opp.status}
             </Badge>
-            <span className="text-muted-foreground">
-              {opp.amount
-                ? `${formatter.format(Number(opp.amount))} · ${opp.currency}`
-                : "—"}
+            <span className="text-muted-foreground tabular-nums">
+              {opp.amount ? `${fmtMoney(Number(opp.amount), opp.currency)} · ${opp.currency}` : "—"}
             </span>
             {opp.expected_close_date && (
               <span className="text-muted-foreground">
@@ -100,9 +79,7 @@ export default async function OpportunityDetailPage(props: {
               </span>
             )}
             {opp.owner?.full_name && (
-              <span className="text-muted-foreground">
-                Owner · {opp.owner.full_name}
-              </span>
+              <span className="text-muted-foreground">Owner · {opp.owner.full_name}</span>
             )}
           </div>
         </div>
@@ -117,7 +94,7 @@ export default async function OpportunityDetailPage(props: {
       </div>
 
       <Card className="mb-5">
-        <CardContent className="p-4 text-xs text-muted-foreground">
+        <CardContent className="text-muted-foreground p-4 text-xs">
           Created {format(new Date(opp.created_at), "PP")} · Updated{" "}
           {format(new Date(opp.updated_at), "PP")}
         </CardContent>
@@ -132,19 +109,10 @@ export default async function OpportunityDetailPage(props: {
         />
       </div>
 
-      <h2 className="mb-2 text-xs font-medium uppercase text-muted-foreground">
-        Activity
-      </h2>
+      <h2 className="text-muted-foreground mb-2 text-xs font-medium uppercase">Activity</h2>
       <div className="mb-4 grid gap-3 lg:grid-cols-2">
-        <NoteComposer
-          accountId={opp.account_id}
-          opportunityId={opp.id}
-        />
-        <TaskComposer
-          accountId={opp.account_id}
-          opportunityId={opp.id}
-          currentUserId={user.id}
-        />
+        <NoteComposer accountId={opp.account_id} opportunityId={opp.id} />
+        <TaskComposer accountId={opp.account_id} opportunityId={opp.id} currentUserId={user.id} />
       </div>
       <ActivityTimeline activities={activities} />
     </div>

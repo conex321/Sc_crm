@@ -4,12 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
 import { format } from "date-fns";
 import type { OpportunityWithRefs } from "@/lib/crm/opportunities";
-
-const formatter = new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+import { fmtMoney } from "@/lib/format";
 
 export function OpportunityList({
   accountId,
@@ -28,13 +23,13 @@ export function OpportunityList({
         </Button>
       </div>
       {opportunities.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-center text-xs text-muted-foreground">
+        <div className="text-muted-foreground rounded-md border border-dashed p-6 text-center text-xs">
           No opportunities yet.
         </div>
       ) : (
         <div className="overflow-hidden rounded-md border">
           <table className="w-full">
-            <thead className="bg-muted/40 text-left text-[11px] uppercase text-muted-foreground">
+            <thead className="bg-muted/40 text-muted-foreground text-left text-[11px] uppercase">
               <tr>
                 <th className="px-3 py-2 font-medium">Name</th>
                 <th className="px-3 py-2 font-medium">Pipeline</th>
@@ -46,15 +41,9 @@ export function OpportunityList({
             </thead>
             <tbody>
               {opportunities.map((o) => (
-                <tr
-                  key={o.id}
-                  className="border-t hover:bg-muted/30 [&_td]:px-3 [&_td]:py-2"
-                >
+                <tr key={o.id} className="hover:bg-muted/30 border-t [&_td]:px-3 [&_td]:py-2">
                   <td>
-                    <Link
-                      href={`/opportunities/${o.id}`}
-                      className="font-medium hover:underline"
-                    >
+                    <Link href={`/opportunities/${o.id}`} className="font-medium hover:underline">
                       {o.name}
                     </Link>
                   </td>
@@ -64,8 +53,8 @@ export function OpportunityList({
                       {o.stage?.name ?? "—"}
                     </Badge>
                   </td>
-                  <td className="text-muted-foreground">
-                    {o.amount ? formatter.format(Number(o.amount)) : "—"}
+                  <td className="text-muted-foreground tabular-nums">
+                    {o.amount ? fmtMoney(Number(o.amount), o.currency) : "—"}
                   </td>
                   <td className="text-muted-foreground">
                     {o.expected_close_date

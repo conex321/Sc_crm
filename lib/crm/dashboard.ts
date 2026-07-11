@@ -99,9 +99,7 @@ export async function getDashboardData(user: SessionUser): Promise<DashboardData
     .order("last_touch_at", { ascending: true, nullsFirst: false })
     .limit(8);
   if (!isAdmin) {
-    followupQ = followupQ.or(
-      `assigned_user_id.eq.${user.id},owner_user_id.eq.${user.id}`,
-    );
+    followupQ = followupQ.or(`assigned_user_id.eq.${user.id},owner_user_id.eq.${user.id}`);
   }
 
   const callsBase = () => {
@@ -169,9 +167,7 @@ export async function getDashboardData(user: SessionUser): Promise<DashboardData
     (() => {
       let q = sb
         .from("opportunities")
-        .select(
-          "amount, stage:stage_id(name, position, probability), pipeline:pipeline_id(name)",
-        )
+        .select("amount, stage:stage_id(name, position, probability), pipeline:pipeline_id(name)")
         .eq("status", "open")
         .is("deleted_at", null);
       if (!isAdmin) q = q.eq("owner_user_id", user.id);
@@ -256,7 +252,10 @@ export async function getDashboardData(user: SessionUser): Promise<DashboardData
     }
     customerBook = book;
 
-    const byUser = new Map<string, { calls: number; emails: number; notes: number; total: number }>();
+    const byUser = new Map<
+      string,
+      { calls: number; emails: number; notes: number; total: number }
+    >();
     for (const a of weekActsRes.data ?? []) {
       if (!a.user_id) continue;
       const agg = byUser.get(a.user_id) ?? { calls: 0, emails: 0, notes: 0, total: 0 };
@@ -312,10 +311,6 @@ export async function getDashboardData(user: SessionUser): Promise<DashboardData
   };
 }
 
-export function fmtCad(n: number): string {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}
+// Shared house formatter lives in lib/format.ts; re-exported so existing
+// imports (dashboard/page.tsx) keep working.
+export { fmtCad } from "@/lib/format";
