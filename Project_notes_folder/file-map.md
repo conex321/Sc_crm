@@ -40,3 +40,4 @@
 
 ---
 
+- D-044 additions (2026-07-11): `lib/import/columns.ts` (field registry: template ↔ DB fields, aliases, autoMap), `lib/import/engine.ts` (chunked dedupe engine + lineage), `app/(dashboard)/accounts/import/` (wizard) + `app/(dashboard)/accounts/imports/` (history + batch bulk-ops), `components/crm/{import-wizard,import-batch-rows-table}.tsx`, `supabase/migrations/0012_import_batches.sql`, `scripts/import-google-sheet-leads.mts` (`npm run leads:import-sheet`), `scripts/hubspot-import.mts` (`npm run leads:import-hubspot`, needs HUBSPOT_ACCESS_TOKEN)

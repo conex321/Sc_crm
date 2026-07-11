@@ -439,3 +439,33 @@ Append-only audit trail. Newest entries at the bottom. Never rewrite past entrie
 - db_changes: [migration 0010 applied (followup_leads view + index); 72 customer accounts owner->Rayan; demo seed rows purged; 6 calls re-matched]
 - verified: [tsc, next build, e2e 13/13 routes, website endpoint smoke (auth/honeypot/create/dedupe + side-effects, cleaned up), mailshake webhook inline processing (cleaned up), daily-digest ?dry=1]
 - next: commit + deploy on Matthew's go; set activation env (MAILSHAKE_WEBHOOK_SECRET+register, SLACK_WEBHOOK_URL, SMTP_USER/PASS, WEBSITE_LEAD_TOKEN); Matthew+Rayan connect Gmail
+
+## 2026-07-09T22:30Z — Claude
+- session: sessions/2026-07-09-edit-crash-rep-access.md
+- decisions_added: [D-043]
+- failures_added: []
+- files_changed: [components/crm/account-form.tsx, components/crm/opportunity-form.tsx, app/(dashboard)/accounts/actions.ts, app/(dashboard)/opportunities/actions.ts, supabase/migrations/0011_rep_edit_access.sql, scripts/e2e-rayan.mts]
+- db_changes: [migration 0011 applied (rep-wide UPDATE policies on accounts/contacts/opportunities)]
+- verified: [tsc, next build, e2e 16/16 incl. form routes, Playwright browser test of edit+save, simulated-JWT RLS check (rollback)]
+- deployed: [commits 588ccfb (D-042) + 665744c (D-043) pushed and deployed to Vercel prod; login 200 verified]
+- next: Rayan retries the pencil; activation env for Slack/digest/Mailshake-webhook/website-token; Gmail connects
+
+## 2026-07-10T00:25Z — Claude
+- session: sessions/2026-07-09-edit-crash-rep-access.md (follow-up entry)
+- decisions_added: [] (addendum to D-043)
+- failures_added: []
+- files_changed: [app/(dashboard)/accounts/[id]/contacts/actions.ts, scripts/e2e-rayan.mts]
+- verified: [rep contact create+edit via sim-JWT probes (rollback) and live browser create→edit (cleaned up), e2e 17/17, tsc]
+- deployed: [commit ba2fc31 pushed + deployed to Vercel prod; login 200]
+- note: rep soft-delete of contacts/accounts blocked by RLS visibility check on the new row — intentional (deletes admin-only)
+- next: Rayan resumes normal use; activation env + Gmail connects still pending
+
+## 2026-07-11T14:15Z — Claude
+- session: sessions/2026-07-11-lead-import-feature.md
+- decisions_added: [D-044]
+- failures_added: []
+- files_changed: [supabase/migrations/0012_import_batches.sql, lib/db/schema.ts, lib/import/columns.ts, lib/import/engine.ts, app/(dashboard)/accounts/import/*, app/(dashboard)/accounts/imports/*, components/crm/import-wizard.tsx, components/crm/import-batch-rows-table.tsx, app/(dashboard)/accounts/page.tsx, scripts/import-google-sheet-leads.mts, scripts/hubspot-import.mts, scripts/e2e-rayan.mts, scripts/{e2e-inbox-check,mailshake-e2e-validate,vercel-smoke-prod,full-app-validate}.mts, scripts/create-{demo,rayan}-user.sql, package.json]
+- db_changes: [migration 0012 applied; 2,782 accounts + ~2,900 contacts imported (OSSD sheet, owner Rayan, 3 batches); lineage reconciled after first-run crash; auth passwords rotated for demo/admin/rayan]
+- verified: [tsc, build, e2e 19/19 (incl. prod with rotated creds), browser wizard loop + DB ground truth (test data purged), sim-JWT batch RLS, 1425-row batch page pagination]
+- deployed: [commit d6640d8 pushed + deployed to Vercel prod]
+- next: HubSpot token from Matthew -> leads:import-hubspot; optional remaining OSSD tabs; future platform sync via engine + external_ids
