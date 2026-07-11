@@ -60,10 +60,48 @@ export async function listOpportunitiesForAccount(
   return (data ?? []) as unknown as OpportunityWithRefs[];
 }
 
+/**
+ * URL-driven filters shared by all three deal views (02-02). Applied
+ * server-side so kanban column counts/sums stay truthful under filters.
+ */
+export type DealFilters = {
+  ownerId?: string | null;
+  label?: string | null;
+  status?: "open" | "won" | "lost";
+};
+
 export async function listOpportunitiesByPipeline(
   pipelineId: string,
+  filters: DealFilters = {},
 ): Promise<BoardOpportunity[]> {
   const sb = await getSupabaseServerClient();
+  const status = filters.status ?? "open";
+
+  const buildQuery = () => {
+    let q = sb
+      .from("opportunities")
+      .select(SELECT)
+      .eq("pipeline_id", pipelineId)
+      .eq("status", status)
+      .is("deleted_at", null);
+    if (filters.ownerId) q = q.eq("owner_user_id", filters.ownerId);
+    if (filters.label) q = q.eq("label", filters.label);
+    return q.limit(500);
+  };
+
+  if (status !== "open") {
+    // Closed-deals mode (won/lost chips): the next-task view only contains
+    // open deals, so skip the merge entirely — closed deals have no next
+    // activity and never rot.
+    const { data, error } = await buildQuery();
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as unknown as OpportunityWithRefs[]).map((o) => ({
+      ...o,
+      next_task: null,
+      is_rotten: false,
+    }));
+  }
+
   // Next-task fetch filters the security_invoker view by pipeline_id only —
   // NO .in() ID lists (breaks past ~100 ids). ≤500 open deals keeps the view
   // rows bounded well under the 1,000-row cap.
@@ -71,13 +109,7 @@ export async function listOpportunitiesByPipeline(
   // applies as the querying rep) — those chips render as the "none" warning
   // state. Expected per D-038, not a bug.
   const [oppsRes, nextTasksRes, stages] = await Promise.all([
-    sb
-      .from("opportunities")
-      .select(SELECT)
-      .eq("pipeline_id", pipelineId)
-      .eq("status", "open")
-      .is("deleted_at", null)
-      .limit(500),
+    buildQuery(),
     sb
       .from("opportunity_next_task")
       .select("opportunity_id, activity_id, title, due_at")

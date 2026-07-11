@@ -17,13 +17,6 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, User } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DealActivityPopover } from "@/components/crm/deal-activity-popover";
 import { DealLabelChip } from "@/components/crm/deal-label-chip";
 import { WonLostDialog } from "@/components/crm/won-lost-dialog";
@@ -44,28 +37,22 @@ type Stage = {
   is_lost: boolean;
 };
 
-const SORT_OPTIONS: { value: DealSort; label: string }[] = [
-  { value: "next_activity", label: "Next activity" },
-  { value: "value", label: "Deal value" },
-  { value: "expected_close", label: "Expected close date" },
-  { value: "owner", label: "Owner" },
-];
-
 export function PipelineBoard({
   stages,
   initialOpportunities,
-  currentUserId,
-  sort,
+  sort = "next_activity",
+  readOnly,
 }: {
   stages: Stage[];
   initialOpportunities: BoardOpportunity[];
-  currentUserId: string;
-  sort?: DealSort; // plan 02 will drive sort from the URL; internal state until then
+  sort?: DealSort; // driven by ?sort= (page parses + whitelists)
+  // Closed-deals mode (?status=won|lost): board renders those deals read-only
+  // in their final stage — no dragging, no drop zones. The value carries which
+  // closed status is showing so empty boards still render the right column(s).
+  readOnly?: "won" | "lost";
 }) {
   const [opportunities, setOpportunities] = useState(initialOpportunities);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [mineOnly, setMineOnly] = useState(false);
-  const [internalSort, setInternalSort] = useState<DealSort>("next_activity");
   const [pendingClose, setPendingClose] = useState<{
     oppId: string;
     name: string;
@@ -82,16 +69,20 @@ export function PipelineBoard({
 
   const refresh = () => router.refresh();
 
-  const activeSort = sort ?? internalSort;
-  // Won/lost stages leave the board — closed deals are reached via drop zones.
-  const openStages = stages.filter((s) => !s.is_won && !s.is_lost);
+  // Open board: won/lost stages leave the board (closed deals are reached via
+  // the won/lost filter chips). Read-only closed board: columns are the stages
+  // flagged for that status PLUS any stage that actually holds matching deals
+  // (legacy rows closed without a stage move).
+  const boardStages = readOnly
+    ? stages.filter(
+        (s) =>
+          (readOnly === "won" ? s.is_won : s.is_lost) ||
+          opportunities.some((o) => o.stage_id === s.id),
+      )
+    : stages.filter((s) => !s.is_won && !s.is_lost);
 
-  const visible = mineOnly
-    ? opportunities.filter((o) => o.owner_user_id === currentUserId)
-    : opportunities;
   const byStage = (stageId: string) =>
-    visible.filter((o) => o.stage_id === stageId).sort(compareDeals(activeSort));
-  const mineCount = opportunities.filter((o) => o.owner_user_id === currentUserId).length;
+    opportunities.filter((o) => o.stage_id === stageId).sort(compareDeals(sort));
 
   const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
 
@@ -164,61 +155,21 @@ export function PipelineBoard({
   };
 
   const active = activeId ? opportunities.find((o) => o.id === activeId) : null;
-  const openVisible = visible.filter((o) => o.status === "open");
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-muted-foreground text-xs">
-          <span className="text-foreground font-medium">{sumByCurrency(openVisible)}</span> open ·{" "}
-          <span className="text-foreground font-medium">
-            {sumByCurrency(openVisible, true, stages)}
-          </span>{" "}
-          weighted forecast
-        </div>
-        <div className="flex items-center gap-2">
-          {!sort && (
-            <Select
-              value={internalSort}
-              onValueChange={(v) => setInternalSort(v as DealSort)}
-            >
-              <SelectTrigger className="h-8 w-44 text-xs" aria-label="Sort deals">
-                <span className="text-muted-foreground">Sort:&nbsp;</span>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORT_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          <button
-            type="button"
-            onClick={() => setMineOnly((v) => !v)}
-            className={`rounded-md border px-3 py-1 text-xs font-medium transition ${
-              mineOnly
-                ? "bg-background shadow-sm"
-                : "bg-muted/20 text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {mineOnly ? "Showing mine" : "Mine only"} ({mineCount})
-          </button>
-        </div>
-      </div>
       <div className="flex gap-3 overflow-x-auto pb-4">
-        {openStages.map((stage) => (
+        {boardStages.map((stage) => (
           <StageColumn
             key={stage.id}
             stage={stage}
             opportunities={byStage(stage.id)}
             onCardAction={refresh}
+            readOnly={Boolean(readOnly)}
           />
         ))}
       </div>
-      {activeId && (
+      {activeId && !readOnly && (
         <div className="fixed inset-x-6 bottom-4 z-40 flex gap-3">
           <CloseDropZone variant="won" />
           <CloseDropZone variant="lost" />
@@ -270,12 +221,16 @@ function StageColumn({
   stage,
   opportunities,
   onCardAction,
+  readOnly,
 }: {
   stage: Stage;
   opportunities: BoardOpportunity[];
   onCardAction: () => void;
+  readOnly?: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: stage.id });
+  // Hook is called unconditionally (rules of hooks); in read-only mode nothing
+  // is draggable, so this droppable never activates.
+  const { setNodeRef, isOver } = useDroppable({ id: stage.id, disabled: readOnly });
   const rottenCount = opportunities.filter((o) => o.is_rotten).length;
 
   return (
@@ -306,9 +261,13 @@ function StageColumn({
         </div>
       </div>
       <div className="flex flex-col gap-2 p-2">
-        {opportunities.map((o) => (
-          <DraggableOpportunity key={o.id} opp={o} onCardAction={onCardAction} />
-        ))}
+        {opportunities.map((o) =>
+          readOnly ? (
+            <OpportunityCard key={o.id} opp={o} onDone={onCardAction} />
+          ) : (
+            <DraggableOpportunity key={o.id} opp={o} onCardAction={onCardAction} />
+          ),
+        )}
         {opportunities.length === 0 && (
           <div className="rounded border border-dashed p-4 text-center text-[11px] text-[var(--pd-text-muted)]">
             No deals
