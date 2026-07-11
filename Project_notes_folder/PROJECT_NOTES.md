@@ -1,10 +1,10 @@
 # Project Notes — SchoolConex CRM
 
-**Last updated:** 2026-07-11
-**Last agent:** Claude
-**Session summary:** Pipedrive-style lead import shipped (D-044): `/accounts/import` wizard (Excel/CSV template, auto-map + manual column mapping, client-side parse, chunked dedupe engine) + `/accounts/imports` history with bulk edit / bulk delete / whole-batch revert (service-role, batch-ownership gated). Imported the "International OSSD Leads" Google Sheet live — **2,782 new accounts + ~2,900 contacts, all owned by Rayan**, as 3 revertable batches. HubSpot importer ready (awaits `HUBSPOT_ACCESS_TOKEN`). Security: the hardcoded test password sitting in the PUBLIC repo was scrubbed from all scripts and **rotated in prod** (demo/admin/rayan). Deployed (`d6640d8`). Prior: D-043 edit-access fix (07-09), D-042 visibility upgrade + D-041 customer import (07-06).
+**Last updated:** 2026-07-11 (Phase 2 deals-parity shipped, D-047)
+**Last agent:** Codex
+**Session summary:** Added an evidence-labelled current-state GTM stack overview and a companion repeatable operating plan. The plan assigns Mailshake to cold outbound, Klaviyo to consented lifecycle, Resend to transactional email, Gmail to human one-to-one, and CRM to system-of-record/control-plane duties. No integration was activated and no outreach was sent.
 **Notes mode:** split
-**Total sessions logged:** 6 (split-mode sessions; earlier history inline in accomplishments.md)
+**Total sessions logged:** 8 (split-mode sessions; earlier history inline in accomplishments.md)
 
 ---
 
