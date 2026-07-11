@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireRole } from "@/lib/auth/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { RotDaysInput } from "./rot-days-input";
 
 export default async function PipelinesAdminPage() {
   await requireRole(["admin"]);
@@ -14,7 +15,7 @@ export default async function PipelinesAdminPage() {
 
   const { data: stages } = await sb
     .from("pipeline_stages")
-    .select("id, pipeline_id, name, position, probability, is_won, is_lost")
+    .select("id, pipeline_id, name, position, probability, is_won, is_lost, rot_days")
     .order("position");
 
   return (
@@ -46,12 +47,17 @@ export default async function PipelinesAdminPage() {
                       <span>
                         {s.position}. {s.name}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {s.is_won
-                          ? "won"
-                          : s.is_lost
-                            ? "lost"
-                            : `${s.probability}%`}
+                      <span className="flex items-center gap-2">
+                        {!s.is_won && !s.is_lost && (
+                          <RotDaysInput stageId={s.id} initialRotDays={s.rot_days} />
+                        )}
+                        <span className="text-[10px] text-muted-foreground">
+                          {s.is_won
+                            ? "won"
+                            : s.is_lost
+                              ? "lost"
+                              : `${s.probability}%`}
+                        </span>
                       </span>
                     </li>
                   ))}
