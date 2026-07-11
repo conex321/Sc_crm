@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-07-11T15:23:44.044Z"
-last_activity: 2026-07-11 — Roadmap created (6 phases, 31/31 requirements mapped)
+status: verifying
+stopped_at: Completed 02-PLAN-01.md (data + board)
+last_updated: "2026-07-11T16:25:12.990Z"
+last_activity: 2026-07-11
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 0
+  completed_plans: 0
   percent: 33
 ---
 
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-07-11)
 
 Phase: 1 of 6 (Pipedrive design system)
 Plan: 2 of 2 in current phase (both executed)
-Status: Phase 1 execution complete — awaiting orchestrator visual checklist + deploy
-Last activity: 2026-07-11 — 01-02 executed (component sweep + CAD formatter + gate: 19/19 e2e)
+Status: Phase complete — ready for verification
+Last activity: 2026-07-11
 
 Progress: [███░░░░░░░] 33%
 
@@ -53,6 +53,7 @@ Progress: [███░░░░░░░] 33%
 
 *Updated after each plan completion*
 | Phase 01 P02 | 30m | 4 tasks | 27 files |
+| Phase 02-deals-parity P01 | 12min | 4 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -67,6 +68,9 @@ Recent decisions affecting current work:
 - Per-phase gate: tsc + build + e2e walk + Playwright, deploy `npx vercel --prod --yes`, report to Matthew, update Project_notes_folder
 - [Phase 01]: Money renders via lib/format.ts: CAD default, locale-follows-currency (en-CA CAD shows plain $); USD data defaults left untouched pending Matthew
 - [Phase 01]: Tabs underline uses always-on transparent border-b-2 to avoid layout shift; button link variant moved to pd-link (never green links)
+- [Phase 02-deals-parity]: stageStatusPatch is the single source of status/won_at/lost_at derivation for all stage writes
+- [Phase 02-deals-parity]: Won/Lost drop zones = fixed bottom bar visible only while dragging; ids dropzone:won/dropzone:lost
+- [Phase 02-deals-parity]: label column omitted from update payload when form lacks the key — edit form cannot wipe labels
 
 ### Pending Todos
 
@@ -80,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-07-11T15:23:44.039Z
-Stopped at: Completed 01-02-PLAN.md
+Last session: 2026-07-11T16:25:12.986Z
+Stopped at: Completed 02-PLAN-01.md (data + board)
 Resume file: None

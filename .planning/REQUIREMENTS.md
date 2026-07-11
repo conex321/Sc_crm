@@ -17,10 +17,10 @@ Requirements for this milestone. Each maps to roadmap phases. Behavior details c
 
 ### Deals (DEAL)
 
-- [ ] **DEAL-01**: Deal cards show title, org/person, value, colored label chip, owner avatar, and a clickable activity icon that completes or schedules an activity without opening the deal
-- [ ] **DEAL-02**: Kanban columns sort by next activity (overdue first, newest-created tiebreak) with a "Sort by" dropdown (value, expected close date, owner)
-- [ ] **DEAL-03**: Per-stage deal rotting — "Rotting in (days)" setting per stage; rotten deals render red; timer keys off last activity/update and resets per the Pipedrive spec
-- [ ] **DEAL-04**: Won/Lost require a reason dialog (reason stored, editable); closed deals leave the board and are reachable via won/lost filter chips
+- [x] **DEAL-01**: Deal cards show title, org/person, value, colored label chip, owner avatar, and a clickable activity icon that completes or schedules an activity without opening the deal
+- [x] **DEAL-02**: Kanban columns sort by next activity (overdue first, newest-created tiebreak) with a "Sort by" dropdown (value, expected close date, owner)
+- [x] **DEAL-03**: Per-stage deal rotting — "Rotting in (days)" setting per stage; rotten deals render red; timer keys off last activity/update and resets per the Pipedrive spec
+- [x] **DEAL-04**: Won/Lost require a reason dialog (reason stored, editable); closed deals leave the board and are reachable via won/lost filter chips
 - [ ] **DEAL-05**: Deals page offers three views — Kanban, List (sortable columns, gear column-picker, multi-select bulk edit), and Forecast (date-bucketed columns on expected close date, won-date override, weighted totals per column, drag card to re-date)
 - [ ] **DEAL-06**: Deal detail page uses Pipedrive's 3-panel layout — summary/fields left, tabbed composer + timeline center, linked person/org/activity widgets right
 - [ ] **DEAL-07**: Filter bar on all deal views: owner picker, label, pipeline switcher
@@ -87,10 +87,10 @@ Deferred to wave 2. Tracked but not in current roadmap.
 | DSGN-03 | Phase 1 | Pending |
 | DSGN-04 | Phase 1 | Complete |
 | DSGN-05 | Phase 1 | Complete |
-| DEAL-01 | Phase 2 | Pending |
-| DEAL-02 | Phase 2 | Pending |
-| DEAL-03 | Phase 2 | Pending |
-| DEAL-04 | Phase 2 | Pending |
+| DEAL-01 | Phase 2 | Complete |
+| DEAL-02 | Phase 2 | Complete |
+| DEAL-03 | Phase 2 | Complete |
+| DEAL-04 | Phase 2 | Complete |
 | DEAL-05 | Phase 2 | Pending |
 | DEAL-06 | Phase 2 | Pending |
 | DEAL-07 | Phase 2 | Pending |
