@@ -1,5 +1,10 @@
 import "server-only";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  compareDeals,
+  sumByCurrency,
+  type DealSort,
+} from "@/lib/crm/deal-board-utils";
 
 export type OpportunityRow = {
   id: string;
@@ -142,6 +147,140 @@ export async function listOpportunitiesByPipeline(
       now - Date.parse(o.updated_at) > rotDays * 86_400_000;
     return { ...o, next_task: nextTaskByOpp.get(o.id) ?? null, is_rotten };
   });
+}
+
+export type ListSort = DealSort | "title" | "stage" | "created" | "updated" | "account";
+
+// Ascending-semantics comparators for the list view; "desc" is applied by the
+// caller inverting argument order. Shared DealSort keys reuse compareDeals.
+function listComparator(
+  sort: ListSort,
+): (a: BoardOpportunity, b: BoardOpportunity) => number {
+  switch (sort) {
+    case "next_activity":
+    case "expected_close":
+    case "owner":
+      return compareDeals(sort);
+    case "value":
+      // List semantics: ascending amount (compareDeals("value") is the
+      // board's fixed value-desc ordering — not reusable for asc/desc toggles).
+      return (a, b) => {
+        const av = a.amount != null ? Number(a.amount) : Infinity; // nulls last
+        const bv = b.amount != null ? Number(b.amount) : Infinity;
+        if (av === bv) return 0;
+        return av - bv;
+      };
+    case "title":
+      return (a, b) => a.name.localeCompare(b.name);
+    case "stage":
+      return (a, b) => {
+        const ap = a.stage?.position ?? Infinity;
+        const bp = b.stage?.position ?? Infinity;
+        if (ap === bp) return 0;
+        return ap - bp;
+      };
+    case "created":
+      return (a, b) => Date.parse(a.created_at) - Date.parse(b.created_at);
+    case "updated":
+      return (a, b) => Date.parse(a.updated_at) - Date.parse(b.updated_at);
+    case "account":
+      return (a, b) => {
+        const an = a.account?.name;
+        const bn = b.account?.name;
+        if (an && bn) return an.localeCompare(bn);
+        if (!an && bn) return 1; // nulls last
+        if (an && !bn) return -1;
+        return 0;
+      };
+  }
+}
+
+const LIST_PAGE_SIZE = 50;
+const LIST_FETCH_CAP = 500;
+
+/**
+ * List-view loader (02-02 documented decision — do NOT "optimize" into .in()
+ * traps): fetch up to 500 matching deals in ONE bounded query (same cap as the
+ * board), merge next-task rows from the pipeline-filtered view (one query,
+ * never per-row), sort in server JS, then slice the requested 50-row page.
+ * This keeps pagination correct for EVERY sort key — including next-activity
+ * and cross-table columns PostgREST cannot order by — while rendering only 50
+ * rows. When more than 500 rows match, `capped` is true and the footer says so.
+ */
+export async function listDealsForListView(
+  pipelineId: string,
+  filters: DealFilters,
+  sort: ListSort,
+  dir: "asc" | "desc",
+  page: number,
+): Promise<{
+  rows: BoardOpportunity[];
+  total: number;
+  capped: boolean;
+  openSum: string;
+  weightedOpenSum: string;
+}> {
+  const sb = await getSupabaseServerClient();
+  const status = filters.status ?? "open";
+
+  let query = sb
+    .from("opportunities")
+    .select(SELECT, { count: "exact" })
+    .eq("pipeline_id", pipelineId)
+    .eq("status", status)
+    .is("deleted_at", null);
+  if (filters.ownerId) query = query.eq("owner_user_id", filters.ownerId);
+  if (filters.label) query = query.eq("label", filters.label);
+
+  const [oppsRes, nextTasksRes, stages] = await Promise.all([
+    query.range(0, LIST_FETCH_CAP - 1),
+    status === "open"
+      ? sb
+          .from("opportunity_next_task")
+          .select("opportunity_id, activity_id, title, due_at")
+          .eq("pipeline_id", pipelineId)
+          .limit(1000)
+      : Promise.resolve({ data: [] as NextTask[], error: null }),
+    listStagesForPipeline(pipelineId),
+  ]);
+  if (oppsRes.error) throw new Error(oppsRes.error.message);
+  if (nextTasksRes.error) throw new Error(nextTasksRes.error.message);
+
+  const opps = (oppsRes.data ?? []) as unknown as OpportunityWithRefs[];
+  const nextTasks = (nextTasksRes.data ?? []) as unknown as NextTask[];
+
+  const nextTaskByOpp = new Map(
+    nextTasks.map((t) => [
+      t.opportunity_id,
+      { activity_id: t.activity_id, title: t.title, due_at: t.due_at },
+    ]),
+  );
+  const rotDaysByStage = new Map<string, number | null>(
+    stages.map((s: { id: string; rot_days: number | null }) => [s.id, s.rot_days]),
+  );
+  const now = Date.now();
+
+  const merged: BoardOpportunity[] = opps.map((o) => {
+    const rotDays = rotDaysByStage.get(o.stage_id);
+    const is_rotten =
+      o.status === "open" &&
+      rotDays != null &&
+      now - Date.parse(o.updated_at) > rotDays * 86_400_000;
+    return { ...o, next_task: nextTaskByOpp.get(o.id) ?? null, is_rotten };
+  });
+
+  const cmp = listComparator(sort);
+  const sorted = [...merged].sort((a, b) => (dir === "desc" ? cmp(b, a) : cmp(a, b)));
+
+  const total = oppsRes.count ?? merged.length;
+  const openDeals = merged.filter((o) => o.status === "open");
+  return {
+    rows: sorted.slice((page - 1) * LIST_PAGE_SIZE, page * LIST_PAGE_SIZE),
+    total,
+    capped: total >= LIST_FETCH_CAP,
+    openSum: sumByCurrency(openDeals),
+    weightedOpenSum: sumByCurrency(openDeals, true, stages),
+  };
 }
 
 export async function getOpportunity(id: string): Promise<OpportunityWithRefs | null> {

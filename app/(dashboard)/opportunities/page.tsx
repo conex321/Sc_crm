@@ -5,10 +5,13 @@ import {
   listPipelines,
   listStagesForPipeline,
   listOpportunitiesByPipeline,
+  listDealsForListView,
   type DealFilters,
+  type ListSort,
 } from "@/lib/crm/opportunities";
 import { PipelineBoard } from "@/components/crm/pipeline-board";
 import { DealsFilterBar } from "@/components/crm/deals-filter-bar";
+import { DealsList } from "@/components/crm/deals-list";
 import { requireUser } from "@/lib/auth/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { sumByCurrency, type DealSort } from "@/lib/crm/deal-board-utils";
@@ -18,6 +21,14 @@ const VIEWS = ["kanban", "list", "forecast"] as const;
 type View = (typeof VIEWS)[number];
 
 const DEAL_SORTS: readonly DealSort[] = ["next_activity", "value", "expected_close", "owner"];
+const LIST_SORTS: readonly ListSort[] = [
+  ...DEAL_SORTS,
+  "title",
+  "stage",
+  "created",
+  "updated",
+  "account",
+];
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const LABEL_KEYS = DEAL_LABELS.map((l) => l.key as string);
 
@@ -43,7 +54,7 @@ export default async function OpportunitiesPage(props: {
   searchParams: Promise<SearchParams>;
 }) {
   const params = await props.searchParams;
-  await requireUser();
+  const user = await requireUser();
   const pipelines = await listPipelines();
 
   const activePipeline =
@@ -122,8 +133,35 @@ export default async function OpportunitiesPage(props: {
       />
     );
   } else if (view === "list") {
-    // Task 2 wires the list view here.
-    body = null;
+    const listSort: ListSort = (LIST_SORTS as readonly string[]).includes(params.sort ?? "")
+      ? (params.sort as ListSort)
+      : "next_activity";
+    const dir: "asc" | "desc" = params.dir === "desc" ? "desc" : "asc";
+    const pageNum = Math.max(1, Number.parseInt(params.page ?? "1", 10) || 1);
+    const list = await listDealsForListView(
+      activePipeline.id,
+      filters,
+      listSort,
+      dir,
+      pageNum,
+    );
+    openSum = list.openSum;
+    weightedSum = list.weightedOpenSum;
+    body = (
+      <DealsList
+        rows={list.rows}
+        total={list.total}
+        capped={list.capped}
+        page={pageNum}
+        sort={listSort}
+        dir={dir}
+        users={users}
+        stages={stages}
+        isAdmin={user.role === "admin"}
+        newDealHref={`/opportunities/new?pipeline=${activePipeline.slug}`}
+        hasFilters={Boolean(owner || label || status)}
+      />
+    );
   } else {
     // Task 3 wires the forecast view here.
     void arrange;
