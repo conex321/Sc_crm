@@ -3,12 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandInput,
-  CommandList,
-} from "@/components/ui/command";
+import { CommandDialog, CommandEmpty, CommandInput, CommandList } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
 
 export function GlobalSearchTrigger() {
@@ -32,11 +27,11 @@ export function GlobalSearchTrigger() {
         variant="ghost"
         size="sm"
         onClick={() => setOpen(true)}
-        className="h-8 w-72 justify-start gap-2 px-2 text-muted-foreground"
+        className="bg-secondary hover:bg-accent h-8 w-64 justify-start gap-2 rounded-full px-3 text-[13px] font-normal md:w-80"
       >
-        <Search className="size-4" />
-        <span className="text-xs">Search accounts, contacts…</span>
-        <kbd className="ml-auto rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px]">
+        <Search className="text-pd-text-secondary size-4" />
+        <span>Search</span>
+        <kbd className="text-pd-text-muted ml-auto rounded-[4px] border px-1 font-mono text-[11px]">
           ⌘K
         </kbd>
       </Button>
@@ -45,9 +40,7 @@ export function GlobalSearchTrigger() {
         <CommandInput placeholder="Type to search…" />
         <CommandList>
           {/* Phase 1 stub: full-text search across accounts/contacts/opportunities lands later. */}
-          <CommandEmpty>
-            Search isn&apos;t wired yet — coming in a follow-up.
-          </CommandEmpty>
+          <CommandEmpty>Search isn&apos;t wired yet — coming in a follow-up.</CommandEmpty>
         </CommandList>
       </CommandDialog>
     </>

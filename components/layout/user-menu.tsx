@@ -46,15 +46,13 @@ export function UserMenu({ user }: { user: SessionUser }) {
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span className="text-xs font-medium">{user.fullName}</span>
-          <span className="text-[11px] font-normal text-muted-foreground">
-            {user.googleEmail}
-          </span>
+          <span className="text-muted-foreground text-[11px] font-normal">{user.googleEmail}</span>
           <Badge variant="secondary" className="mt-1 w-fit text-[10px]">
             {user.role}
           </Badge>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+        <DropdownMenuLabel className="text-muted-foreground text-[11px] font-normal">
           Theme
         </DropdownMenuLabel>
         {THEME_OPTIONS.map((option) => (
@@ -71,10 +69,7 @@ export function UserMenu({ user }: { user: SessionUser }) {
         <DropdownMenuSeparator />
         <form action="/auth/sign-out" method="post">
           <DropdownMenuItem asChild>
-            <button
-              type="submit"
-              className="flex w-full cursor-pointer items-center gap-2"
-            >
+            <button type="submit" className="flex w-full cursor-pointer items-center gap-2">
               <LogOut className="size-4" />
               <span>Sign out</span>
             </button>

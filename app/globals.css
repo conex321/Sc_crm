@@ -309,13 +309,15 @@
 
   /* Elevation — Pipedrive literal shadows (same in both themes) */
   --pd-elevation-button: 0 1px 2px rgb(42 54 71 / 5%);
-  --pd-elevation-raised: 0 1px 3px rgb(0 0 0 / 7%), 0 1px 2px rgb(0 0 0 / 6%),
-    0 0 1px rgb(0 0 0 / 5%);
+  --pd-elevation-raised:
+    0 1px 3px rgb(0 0 0 / 7%), 0 1px 2px rgb(0 0 0 / 6%), 0 0 1px rgb(0 0 0 / 5%);
   --pd-elevation-raised-hover: 0 0 4px rgba(0, 0, 0, 0.12), 0 3px 5px rgb(0 0 0 / 8%);
-  --pd-elevation-floating: 0 1px 8px rgba(0, 0, 0, 0.1), 0 3px 3px rgb(0 0 0 / 6%),
-    0 3px 4px rgb(0 0 0 / 5%), 0 0 2px rgba(0, 0, 0, 0.16);
-  --pd-elevation-overlay: 0 8px 10px rgba(0, 0, 0, 0.1), 0 6px 30px rgb(0 0 0 / 6%),
-    0 16px 24px rgb(0 0 0 / 5%), 0 0 2px rgba(0, 0, 0, 0.24);
+  --pd-elevation-floating:
+    0 1px 8px rgba(0, 0, 0, 0.1), 0 3px 3px rgb(0 0 0 / 6%), 0 3px 4px rgb(0 0 0 / 5%),
+    0 0 2px rgba(0, 0, 0, 0.16);
+  --pd-elevation-overlay:
+    0 8px 10px rgba(0, 0, 0, 0.1), 0 6px 30px rgb(0 0 0 / 6%), 0 16px 24px rgb(0 0 0 / 5%),
+    0 0 2px rgba(0, 0, 0, 0.24);
 
   /* Button hover/pressed + nav active states */
   --pd-primary-hover: #077838;
@@ -397,13 +399,15 @@
 
   /* Elevation — same values in both themes */
   --pd-elevation-button: 0 1px 2px rgb(42 54 71 / 5%);
-  --pd-elevation-raised: 0 1px 3px rgb(0 0 0 / 7%), 0 1px 2px rgb(0 0 0 / 6%),
-    0 0 1px rgb(0 0 0 / 5%);
+  --pd-elevation-raised:
+    0 1px 3px rgb(0 0 0 / 7%), 0 1px 2px rgb(0 0 0 / 6%), 0 0 1px rgb(0 0 0 / 5%);
   --pd-elevation-raised-hover: 0 0 4px rgba(0, 0, 0, 0.12), 0 3px 5px rgb(0 0 0 / 8%);
-  --pd-elevation-floating: 0 1px 8px rgba(0, 0, 0, 0.1), 0 3px 3px rgb(0 0 0 / 6%),
-    0 3px 4px rgb(0 0 0 / 5%), 0 0 2px rgba(0, 0, 0, 0.16);
-  --pd-elevation-overlay: 0 8px 10px rgba(0, 0, 0, 0.1), 0 6px 30px rgb(0 0 0 / 6%),
-    0 16px 24px rgb(0 0 0 / 5%), 0 0 2px rgba(0, 0, 0, 0.24);
+  --pd-elevation-floating:
+    0 1px 8px rgba(0, 0, 0, 0.1), 0 3px 3px rgb(0 0 0 / 6%), 0 3px 4px rgb(0 0 0 / 5%),
+    0 0 2px rgba(0, 0, 0, 0.16);
+  --pd-elevation-overlay:
+    0 8px 10px rgba(0, 0, 0, 0.1), 0 6px 30px rgb(0 0 0 / 6%), 0 16px 24px rgb(0 0 0 / 5%),
+    0 0 2px rgba(0, 0, 0, 0.24);
 
   /* Button hover/pressed + nav active states */
   --pd-primary-hover: #5d9867;
@@ -423,7 +427,9 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
   /* Tighter table rows by default — CRM data density */
   table {
