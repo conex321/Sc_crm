@@ -85,6 +85,8 @@ const ROUTES: RouteCheck[] = [
   { path: "/settings/integrations", expectBody: [/Integrations|Drive/i] },
   { path: "/settings/templates", expectBody: [/template/i] },
   { path: "/settings/pipelines", expectBody: [/Pipeline/i] },
+  { path: "/opportunities?view=list", expectBody: [/Next activity/, /Expected close/] },
+  { path: "/opportunities?view=forecast", expectBody: [/No close date/] },
 ];
 
 async function fetchRoute(cookie: string, route: RouteCheck) {

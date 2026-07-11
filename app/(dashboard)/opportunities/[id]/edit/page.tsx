@@ -61,6 +61,7 @@ export default async function EditOpportunityPage(props: {
           expectedCloseDate: opp.expected_close_date ?? "",
           ownerUserId: opp.owner_user_id ?? "",
           primaryContactId: opp.primary_contact_id ?? "",
+          label: opp.label ?? "",
         }}
         action={update}
         submitLabel="Save changes"

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DEAL_LABELS } from "@/lib/crm/labels";
 import { toast } from "sonner";
 
 type Account = { id: string; name: string };
@@ -35,6 +36,7 @@ export function OpportunityForm({
     expectedCloseDate?: string;
     ownerUserId?: string;
     primaryContactId?: string;
+    label?: string;
   };
   accounts: Account[];
   pipelines: Pipeline[];
@@ -188,21 +190,47 @@ export function OpportunityForm({
           />
         </div>
       </div>
-      <div className="grid gap-1.5">
-        <Label htmlFor="ownerUserId">Owner</Label>
-        <Select name="ownerUserId" defaultValue={defaults?.ownerUserId || "unassigned"}>
-          <SelectTrigger id="ownerUserId">
-            <SelectValue placeholder="Unassigned" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {users.map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.full_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-1.5">
+          <Label htmlFor="ownerUserId">Owner</Label>
+          <Select name="ownerUserId" defaultValue={defaults?.ownerUserId || "unassigned"}>
+            <SelectTrigger id="ownerUserId">
+              <SelectValue placeholder="Unassigned" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="unassigned">Unassigned</SelectItem>
+              {users.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="label">Label</Label>
+          {/* Fixed six-key palette (lib/crm/labels.ts); "none" sentinel → null (D-043). */}
+          <Select name="label" defaultValue={defaults?.label || "none"}>
+            <SelectTrigger id="label">
+              <SelectValue placeholder="No label" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No label</SelectItem>
+              {DEAL_LABELS.map((l) => (
+                <SelectItem key={l.key} value={l.key}>
+                  <span
+                    className="mr-1.5 inline-block size-2 rounded-full"
+                    style={{
+                      background: `var(--pd-label-${l.key}-bg)`,
+                      boxShadow: `0 0 0 1px var(--pd-label-${l.key}-fg)`,
+                    }}
+                  />
+                  {l.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="flex items-center justify-end gap-2 pt-2">
         <Button
