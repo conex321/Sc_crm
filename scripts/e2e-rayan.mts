@@ -85,7 +85,9 @@ const ROUTES: RouteCheck[] = [
   { path: "/settings/integrations", expectBody: [/Integrations|Drive/i] },
   { path: "/settings/templates", expectBody: [/template/i] },
   { path: "/settings/pipelines", expectBody: [/Pipeline/i] },
-  { path: "/opportunities?view=list", expectBody: [/Next activity/, /Expected close/] },
+  // Empty pipelines legitimately render the "No deals yet" empty state instead
+  // of the table headers — accept either.
+  { path: "/opportunities?view=list", expectBody: [/Next activity|No deals yet/, /Expected close|No deals yet/] },
   { path: "/opportunities?view=forecast", expectBody: [/No close date/] },
 ];
 
