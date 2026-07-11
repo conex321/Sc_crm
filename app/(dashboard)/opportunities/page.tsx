@@ -1,17 +1,20 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ChartNoAxesColumn, Columns3, List, Plus } from "lucide-react";
+import { startOfMonth } from "date-fns";
 import {
   listPipelines,
   listStagesForPipeline,
   listOpportunitiesByPipeline,
   listDealsForListView,
+  listWonOpportunitiesSince,
   type DealFilters,
   type ListSort,
 } from "@/lib/crm/opportunities";
 import { PipelineBoard } from "@/components/crm/pipeline-board";
 import { DealsFilterBar } from "@/components/crm/deals-filter-bar";
 import { DealsList } from "@/components/crm/deals-list";
+import { ForecastBoard } from "@/components/crm/forecast-board";
 import { requireUser } from "@/lib/auth/session";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { sumByCurrency, type DealSort } from "@/lib/crm/deal-board-utils";
@@ -163,9 +166,36 @@ export default async function OpportunitiesPage(props: {
       />
     );
   } else {
-    // Task 3 wires the forecast view here.
-    void arrange;
-    body = null;
+    // Forecast: open deals bucket on expected_close_date, won deals (since the
+    // start of the current month) on won_at. The won/lost chips filter rows:
+    // "won" shows only the won portion; "lost" deals have no forecast bucket,
+    // so that view renders empty columns.
+    const sinceIso = startOfMonth(new Date()).toISOString();
+    const [openDeals, wonDeals] = await Promise.all([
+      status
+        ? Promise.resolve([])
+        : listOpportunitiesByPipeline(activePipeline.id, {
+            ownerId: owner,
+            label,
+            status: "open",
+          }),
+      status === "lost"
+        ? Promise.resolve([])
+        : listWonOpportunitiesSince(activePipeline.id, sinceIso, {
+            ownerId: owner,
+            label,
+          }),
+    ]);
+    openSum = sumByCurrency(openDeals);
+    weightedSum = sumByCurrency(openDeals, true, stages);
+    body = (
+      <ForecastBoard
+        openDeals={openDeals}
+        wonDeals={wonDeals}
+        stages={stages}
+        arrange={arrange}
+      />
+    );
   }
 
   return (

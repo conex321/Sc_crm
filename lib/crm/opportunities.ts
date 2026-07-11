@@ -283,6 +283,34 @@ export async function listDealsForListView(
   };
 }
 
+/**
+ * Won deals for the forecast view, bucketed client-side by won_at.
+ * Owner/label filters apply so all three views honor the shared filter bar.
+ */
+export async function listWonOpportunitiesSince(
+  pipelineId: string,
+  sinceIso: string,
+  filters: Pick<DealFilters, "ownerId" | "label"> = {},
+): Promise<BoardOpportunity[]> {
+  const sb = await getSupabaseServerClient();
+  let query = sb
+    .from("opportunities")
+    .select(SELECT)
+    .eq("pipeline_id", pipelineId)
+    .eq("status", "won")
+    .is("deleted_at", null)
+    .gte("won_at", sinceIso);
+  if (filters.ownerId) query = query.eq("owner_user_id", filters.ownerId);
+  if (filters.label) query = query.eq("label", filters.label);
+  const { data, error } = await query.limit(500);
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as unknown as OpportunityWithRefs[]).map((o) => ({
+    ...o,
+    next_task: null,
+    is_rotten: false,
+  }));
+}
+
 export async function getOpportunity(id: string): Promise<OpportunityWithRefs | null> {
   const sb = await getSupabaseServerClient();
   const { data, error } = await sb
