@@ -37,9 +37,7 @@ function sumByCurrency(opps: OpportunityWithRefs[], weighted = false, stages?: S
   for (const o of opps) {
     const amt = Number(o.amount ?? 0);
     if (!amt) continue;
-    const prob = weighted
-      ? (stages?.find((s) => s.id === o.stage_id)?.probability ?? 0) / 100
-      : 1;
+    const prob = weighted ? (stages?.find((s) => s.id === o.stage_id)?.probability ?? 0) / 100 : 1;
     totals.set(o.currency, (totals.get(o.currency) ?? 0) + amt * prob);
   }
   if (totals.size === 0) return fmtMoney(0);
@@ -68,18 +66,13 @@ export function PipelineBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
   const [, startTransition] = useTransition();
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
   const visible = mineOnly
     ? opportunities.filter((o) => o.owner_user_id === currentUserId)
     : opportunities;
-  const byStage = (stageId: string) =>
-    visible.filter((o) => o.stage_id === stageId);
-  const mineCount = opportunities.filter(
-    (o) => o.owner_user_id === currentUserId,
-  ).length;
+  const byStage = (stageId: string) => visible.filter((o) => o.stage_id === stageId);
+  const mineCount = opportunities.filter((o) => o.owner_user_id === currentUserId).length;
 
   const handleDragStart = (e: DragStartEvent) => setActiveId(String(e.active.id));
 
@@ -98,9 +91,7 @@ export function PipelineBoard({
           ? {
               ...o,
               stage_id: newStageId,
-              stage: stage
-                ? { id: stage.id, name: stage.name, position: stage.position }
-                : o.stage,
+              stage: stage ? { id: stage.id, name: stage.name, position: stage.position } : o.stage,
               status: stage?.is_won ? "won" : stage?.is_lost ? "lost" : "open",
             }
           : o,
@@ -121,18 +112,11 @@ export function PipelineBoard({
   const openVisible = visible.filter((o) => o.status === "open");
 
   return (
-    <DndContext
-      sensors={sensors}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">
-            {sumByCurrency(openVisible)}
-          </span>{" "}
-          open ·{" "}
-          <span className="font-medium text-foreground">
+        <div className="text-muted-foreground text-xs">
+          <span className="text-foreground font-medium">{sumByCurrency(openVisible)}</span> open ·{" "}
+          <span className="text-foreground font-medium">
             {sumByCurrency(openVisible, true, stages)}
           </span>{" "}
           weighted forecast
@@ -151,16 +135,10 @@ export function PipelineBoard({
       </div>
       <div className="flex gap-3 overflow-x-auto pb-4">
         {stages.map((stage) => (
-          <StageColumn
-            key={stage.id}
-            stage={stage}
-            opportunities={byStage(stage.id)}
-          />
+          <StageColumn key={stage.id} stage={stage} opportunities={byStage(stage.id)} />
         ))}
       </div>
-      <DragOverlay>
-        {active ? <OpportunityCard opp={active} dragging /> : null}
-      </DragOverlay>
+      <DragOverlay>{active ? <OpportunityCard opp={active} dragging /> : null}</DragOverlay>
     </DndContext>
   );
 }
@@ -177,15 +155,15 @@ function StageColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex w-72 shrink-0 flex-col rounded-lg border bg-muted/20 transition ${
-        isOver ? "border-primary/50 bg-muted/40" : ""
+      className={`bg-secondary flex w-72 shrink-0 flex-col rounded-lg border transition ${
+        isOver ? "border-primary/50 bg-accent" : ""
       }`}
     >
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium">{stage.name}</span>
           {stage.probability > 0 && !stage.is_won && !stage.is_lost && (
-            <span className="text-[10px] text-muted-foreground">{stage.probability}%</span>
+            <span className="text-muted-foreground text-[10px]">{stage.probability}%</span>
           )}
           {stage.is_won && (
             <Badge variant="default" className="text-[10px]">
@@ -198,7 +176,7 @@ function StageColumn({
             </Badge>
           )}
         </div>
-        <div className="text-[10px] text-muted-foreground">
+        <div className="text-muted-foreground text-[10px]">
           {opportunities.length} · {sumByCurrency(opportunities)}
         </div>
       </div>
@@ -207,7 +185,7 @@ function StageColumn({
           <DraggableOpportunity key={o.id} opp={o} />
         ))}
         {opportunities.length === 0 && (
-          <div className="rounded border border-dashed p-4 text-center text-[11px] text-muted-foreground">
+          <div className="text-muted-foreground rounded border border-dashed p-4 text-center text-[11px]">
             Empty
           </div>
         )}
@@ -230,16 +208,10 @@ function DraggableOpportunity({ opp }: { opp: OpportunityWithRefs }) {
   );
 }
 
-function OpportunityCard({
-  opp,
-  dragging,
-}: {
-  opp: OpportunityWithRefs;
-  dragging?: boolean;
-}) {
+function OpportunityCard({ opp, dragging }: { opp: OpportunityWithRefs; dragging?: boolean }) {
   return (
     <Card
-      className={`shadow-sm ${dragging ? "rotate-1 shadow-lg ring-1 ring-primary/40" : ""}`}
+      className={`shadow-pd-raised hover:shadow-pd-raised-hover ${dragging ? "shadow-pd-raised-hover ring-primary/40 rotate-1 ring-1" : ""}`}
     >
       <CardContent className="space-y-1 p-3 text-xs">
         <Link
@@ -261,9 +233,7 @@ function OpportunityCard({
           )}
         </div>
         {opp.owner?.full_name && (
-          <div className="truncate text-[10px] text-muted-foreground">
-            {opp.owner.full_name}
-          </div>
+          <div className="text-muted-foreground truncate text-[10px]">{opp.owner.full_name}</div>
         )}
       </CardContent>
     </Card>

@@ -73,12 +73,12 @@ export default async function CampaignsPage(props: {
       </div>
 
       {!webhookSet && (
-        <div className="mb-4 rounded-md border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="border-pd-warning-bg bg-pd-warning-bg-light text-pd-warning-strong mb-4 rounded-md border p-3 text-xs">
           <strong>Tip · activate real-time email events:</strong> Mailshake&apos;s REST API only
           exposes <em>lead pipeline</em> status (open / closed / ignored). To pull individual{" "}
           <strong>sent / opened / clicked / replied / bounced</strong> events with reply text,
           register the webhook URL{" "}
-          <code className="rounded bg-amber-100 px-1 dark:bg-amber-900/40">
+          <code className="bg-pd-warning-bg rounded px-1">
             https://&lt;your-host&gt;/api/webhooks/mailshake
           </code>{" "}
           in Mailshake → Account → Webhooks. Replies will then appear on each account&apos;s

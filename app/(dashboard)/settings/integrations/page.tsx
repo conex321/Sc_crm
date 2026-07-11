@@ -49,21 +49,21 @@ export default async function IntegrationsPage(props: {
     <div className="px-6 py-5">
       <div className="mb-4">
         <h1 className="text-lg font-semibold tracking-tight">Integrations</h1>
-        <p className="text-xs text-muted-foreground">
-          Per-user connections. Connecting Drive lets you attach files and generate
-          contracts as yourself; the system also uses a separate service account for
-          template copies and scheduled status checks.
+        <p className="text-muted-foreground text-xs">
+          Per-user connections. Connecting Drive lets you attach files and generate contracts as
+          yourself; the system also uses a separate service account for template copies and
+          scheduled status checks.
         </p>
       </div>
 
       {params.integration === "connected" && (
-        <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-emerald-300/50 bg-emerald-50 px-3 py-2 text-xs text-emerald-900 dark:border-emerald-700/40 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <div className="border-pd-positive-bg bg-pd-positive-bg-light text-pd-positive-strong mb-4 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
           <CheckCircle2 className="size-4" />
           Connected.
         </div>
       )}
       {params.integration_error && (
-        <div className="mb-4 inline-flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <div className="border-destructive/30 bg-destructive/5 text-destructive mb-4 inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
           <AlertCircle className="size-4" />
           {params.integration_error}
         </div>
@@ -81,9 +81,9 @@ export default async function IntegrationsPage(props: {
               )}
             </div>
             <CardDescription className="text-xs">
-              Account-level API key syncs all campaigns + per-lead status daily
-              (08:00 UTC). Recipients are matched to CRM accounts by email or by
-              Mailshake&apos;s<code className="mx-1">account</code>field.
+              Account-level API key syncs all campaigns + per-lead status daily (08:00 UTC).
+              Recipients are matched to CRM accounts by email or by Mailshake&apos;s
+              <code className="mx-1">account</code>field.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
@@ -142,21 +142,16 @@ export default async function IntegrationsPage(props: {
               )}
             </div>
             <CardDescription className="text-xs">
-              Scope: <code>drive.file</code> (only files the app creates or you open
-              via Picker). Used for &ldquo;Attach from Drive&rdquo; and to share
-              generated contracts as you.
+              Scope: <code>drive.file</code> (only files the app creates or you open via Picker).
+              Used for &ldquo;Attach from Drive&rdquo; and to share generated contracts as you.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center gap-2">
             <Button asChild size="sm">
-              <a href="/api/google-drive/connect">
-                {drive ? "Reconnect" : "Connect Drive"}
-              </a>
+              <a href="/api/google-drive/connect">{drive ? "Reconnect" : "Connect Drive"}</a>
             </Button>
             {drive?.scopes && (
-              <span className="text-[11px] text-muted-foreground">
-                {drive.scopes.join(", ")}
-              </span>
+              <span className="text-muted-foreground text-[11px]">{drive.scopes.join(", ")}</span>
             )}
           </CardContent>
         </Card>
@@ -172,22 +167,17 @@ export default async function IntegrationsPage(props: {
               )}
             </div>
             <CardDescription className="text-xs">
-              Scope: <code>gmail.readonly</code>. Per-rep — connect your own
-              mailbox so threads with CRM contacts land on the account timeline.
-              Daily sync at 09:00 UTC.
+              Scope: <code>gmail.readonly</code>. Per-rep — connect your own mailbox so threads with
+              CRM contacts land on the account timeline. Daily sync at 09:00 UTC.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-xs">
             <div className="flex items-center gap-2">
               <Button asChild size="sm">
-                <a href="/api/gmail/connect">
-                  {gmail ? "Reconnect" : "Connect Gmail"}
-                </a>
+                <a href="/api/gmail/connect">{gmail ? "Reconnect" : "Connect Gmail"}</a>
               </Button>
               {gmailEmail && (
-                <span className="text-[11px] text-muted-foreground">
-                  {gmailEmail}
-                </span>
+                <span className="text-muted-foreground text-[11px]">{gmailEmail}</span>
               )}
             </div>
             <div className="flex items-center justify-between">

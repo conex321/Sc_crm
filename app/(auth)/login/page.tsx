@@ -10,37 +10,37 @@ export default async function LoginPage(props: {
   const error = params.error;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-6">
-      <div className="w-full max-w-sm rounded-lg border bg-card p-6 shadow-sm">
+    <div className="bg-muted/40 flex min-h-screen items-center justify-center p-6">
+      <div className="bg-card w-full max-w-sm rounded-lg border p-6 shadow-sm">
         <div className="mb-6 text-center">
           <h1 className="text-lg font-semibold tracking-tight">SchoolConex CRM</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
+          <p className="text-muted-foreground mt-1 text-xs">
             Internal sales tool. Sign in with your @schoolconex.com Google account.
           </p>
         </div>
 
         {error === "domain" && (
-          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive mb-4 rounded-md border p-3 text-xs">
             That account isn&apos;t on the @schoolconex.com domain.
           </div>
         )}
         {error === "exchange" && (
-          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive mb-4 rounded-md border p-3 text-xs">
             We couldn&apos;t complete sign-in. Please try again.
           </div>
         )}
         {error === "credentials" && (
-          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive mb-4 rounded-md border p-3 text-xs">
             Wrong email or password.
           </div>
         )}
         {error === "missing" && (
-          <div className="mb-4 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+          <div className="border-destructive/30 bg-destructive/5 text-destructive mb-4 rounded-md border p-3 text-xs">
             Email and password are required.
           </div>
         )}
         {reason === "inactive" && (
-          <div className="mb-4 rounded-md border border-amber-300/50 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/40 dark:text-amber-200">
+          <div className="border-pd-warning-bg bg-pd-warning-bg-light text-pd-warning-strong mb-4 rounded-md border p-3 text-xs">
             Your account is deactivated. Ask an admin to reactivate it.
           </div>
         )}
@@ -54,7 +54,7 @@ export default async function LoginPage(props: {
               required
               placeholder="you@schoolconex.com"
               autoComplete="email"
-              className="h-9 rounded-md border bg-background px-2 text-xs"
+              className="bg-background h-9 rounded-md border px-2 text-xs"
             />
             <input
               type="password"
@@ -62,27 +62,27 @@ export default async function LoginPage(props: {
               required
               placeholder="Password"
               autoComplete="current-password"
-              className="h-9 rounded-md border bg-background px-2 text-xs"
+              className="bg-background h-9 rounded-md border px-2 text-xs"
             />
             <button
               type="submit"
-              className="h-9 rounded-md bg-primary text-xs font-medium text-primary-foreground hover:opacity-90"
+              className="bg-primary text-primary-foreground h-9 rounded-md text-xs font-medium hover:opacity-90"
             >
               Sign in
             </button>
           </form>
 
           <div className="my-4 flex items-center gap-2">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[10px] uppercase text-muted-foreground">or</span>
-            <div className="h-px flex-1 bg-border" />
+            <div className="bg-border h-px flex-1" />
+            <span className="text-muted-foreground text-[10px] uppercase">or</span>
+            <div className="bg-border h-px flex-1" />
           </div>
 
           <form action={signInWithGoogle}>
             <input type="hidden" name="next" value={next} />
             <button
               type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition hover:bg-accent"
+              className="bg-background hover:bg-accent inline-flex w-full items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium shadow-sm transition"
             >
               <GoogleIcon className="size-4" />
               Continue with Google
@@ -90,7 +90,7 @@ export default async function LoginPage(props: {
           </form>
         </Suspense>
 
-        <p className="mt-6 text-center text-[11px] text-muted-foreground">
+        <p className="text-muted-foreground mt-6 text-center text-[11px]">
           Internal use only · @schoolconex.com only
         </p>
       </div>

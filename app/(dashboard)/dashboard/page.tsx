@@ -28,10 +28,8 @@ export default async function DashboardPage() {
   return (
     <div className="px-6 py-5">
       <div className="mb-4">
-        <h1 className="text-lg font-semibold tracking-tight">
-          Hi, {user.fullName.split(" ")[0]}
-        </h1>
-        <p className="text-xs text-muted-foreground">
+        <h1 className="text-lg font-semibold tracking-tight">Hi, {user.fullName.split(" ")[0]}</h1>
+        <p className="text-muted-foreground text-xs">
           {isAdmin
             ? "Business overview — team-wide numbers."
             : "Your book of business and what needs you today."}
@@ -39,12 +37,12 @@ export default async function DashboardPage() {
       </div>
 
       {!data.gmailConnected && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-md border border-sky-300/60 bg-sky-50 px-3 py-2.5 dark:border-sky-700/40 dark:bg-sky-950/30">
-          <div className="flex items-center gap-2 text-xs text-sky-900 dark:text-sky-200">
+        <div className="border-pd-info-bg bg-pd-info-bg-light mb-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+          <div className="text-pd-info-strong flex items-center gap-2 text-xs">
             <Mail className="size-4 shrink-0" />
             <span>
-              <strong>Connect Gmail</strong> — your email threads with schools will
-              attach to account timelines automatically (read-only).
+              <strong>Connect Gmail</strong> — your email threads with schools will attach to
+              account timelines automatically (read-only).
             </span>
           </div>
           <Button asChild size="sm">
@@ -56,7 +54,7 @@ export default async function DashboardPage() {
       {(data.unmatchedCount > 0 || data.overdueTasks > 0) && (
         <div className="mb-4 flex flex-wrap gap-2 text-xs">
           {data.overdueTasks > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-300/60 bg-red-50 px-3 py-1 text-red-900 dark:border-red-700/40 dark:bg-red-950/30 dark:text-red-200">
+            <span className="border-pd-negative-bg bg-pd-negative-bg-light text-pd-negative-strong inline-flex items-center gap-1.5 rounded-full border px-3 py-1">
               <AlertCircle className="size-3.5" />
               {data.overdueTasks} overdue task{data.overdueTasks === 1 ? "" : "s"}
             </span>
@@ -64,7 +62,7 @@ export default async function DashboardPage() {
           {data.unmatchedCount > 0 && (
             <Link
               href="/inbox"
-              className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/60 bg-amber-50 px-3 py-1 text-amber-900 hover:bg-amber-100 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-200"
+              className="border-pd-warning-bg bg-pd-warning-bg-light text-pd-warning-strong hover:bg-pd-warning-bg inline-flex items-center gap-1.5 rounded-full border px-3 py-1"
             >
               <Inbox className="size-3.5" />
               {data.unmatchedCount} unmatched call{data.unmatchedCount === 1 ? "" : "s"}/emails —
@@ -119,7 +117,7 @@ export default async function DashboardPage() {
           <CardHeader className="pb-2">
             <div className="flex items-baseline justify-between">
               <CardTitle className="text-sm">Follow-up queue</CardTitle>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-muted-foreground text-[11px]">
                 {data.followupQueue.length} of {data.followupTotal}
               </span>
             </div>
@@ -134,22 +132,20 @@ export default async function DashboardPage() {
                 <Link
                   key={l.id}
                   href={`/accounts/${l.account_id}`}
-                  className="flex items-center justify-between gap-2 rounded border bg-muted/20 px-2 py-1.5 hover:bg-muted/40"
+                  className="bg-muted/20 hover:bg-muted/40 flex items-center justify-between gap-2 rounded border px-2 py-1.5"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-medium">
                       {l.school_name ?? l.account_name}
                     </span>
-                    <span className="block truncate text-[11px] text-muted-foreground">
+                    <span className="text-muted-foreground block truncate text-[11px]">
                       {l.full_name ?? l.email}
                     </span>
                   </span>
-                  <span className="shrink-0 text-right text-[11px] text-muted-foreground">
+                  <span className="text-muted-foreground shrink-0 text-right text-[11px]">
                     <span className="block">last touch: {daysAgo(l.last_touch_at)}</span>
                     {l.last_status_change_at && (
-                      <span className="block">
-                        engaged {fmtDate(l.last_status_change_at)}
-                      </span>
+                      <span className="block">engaged {fmtDate(l.last_status_change_at)}</span>
                     )}
                   </span>
                 </Link>
@@ -181,7 +177,7 @@ export default async function DashboardPage() {
                     {t.due_at && (
                       <span
                         className={`shrink-0 text-[11px] ${
-                          overdue ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground"
+                          overdue ? "text-pd-negative-strong font-medium" : "text-muted-foreground"
                         }`}
                       >
                         {fmtDate(t.due_at)}
@@ -193,14 +189,14 @@ export default async function DashboardPage() {
                   <Link
                     key={t.activity_id}
                     href={`/accounts/${t.account_id}`}
-                    className="flex items-center justify-between gap-2 rounded border bg-muted/20 px-2 py-1.5 hover:bg-muted/40"
+                    className="bg-muted/20 hover:bg-muted/40 flex items-center justify-between gap-2 rounded border px-2 py-1.5"
                   >
                     {inner}
                   </Link>
                 ) : (
                   <div
                     key={t.activity_id}
-                    className="flex items-center justify-between gap-2 rounded border bg-muted/20 px-2 py-1.5"
+                    className="bg-muted/20 flex items-center justify-between gap-2 rounded border px-2 py-1.5"
                   >
                     {inner}
                   </div>
@@ -216,7 +212,7 @@ export default async function DashboardPage() {
               <CardTitle className="text-sm">
                 {isAdmin ? "Pipeline (all reps)" : "Your pipeline"}
               </CardTitle>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-muted-foreground text-[11px]">
                 {fmtCad(data.pipelineTotal)} open · {fmtCad(data.pipelineWeighted)} weighted
               </span>
             </div>
@@ -224,8 +220,8 @@ export default async function DashboardPage() {
           <CardContent className="space-y-1.5 text-xs">
             {data.pipeline.length === 0 ? (
               <div className="text-muted-foreground">
-                No open opportunities yet — create one from an account&apos;s
-                Opportunities tab, or the{" "}
+                No open opportunities yet — create one from an account&apos;s Opportunities tab, or
+                the{" "}
                 <Link href="/opportunities" className="underline">
                   board
                 </Link>
@@ -235,17 +231,17 @@ export default async function DashboardPage() {
               data.pipeline.map((s) => (
                 <div
                   key={`${s.pipeline}·${s.stage}`}
-                  className="flex items-center justify-between rounded border bg-muted/20 px-2 py-1.5"
+                  className="bg-muted/20 flex items-center justify-between rounded border px-2 py-1.5"
                 >
                   <span>
                     <span className="font-medium">{s.stage}</span>{" "}
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-muted-foreground text-[11px]">
                       · {s.pipeline} · {s.count} deal{s.count === 1 ? "" : "s"}
                     </span>
                   </span>
                   <span className="tabular-nums">
                     {fmtCad(s.total)}
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-muted-foreground text-[11px]">
                       {" "}
                       ({s.probability}% → {fmtCad(s.weighted)})
                     </span>
@@ -265,13 +261,13 @@ export default async function DashboardPage() {
               {data.repActivity.map((r) => (
                 <div
                   key={r.userId}
-                  className="flex items-center justify-between rounded border bg-muted/20 px-2 py-1.5"
+                  className="bg-muted/20 flex items-center justify-between rounded border px-2 py-1.5"
                 >
                   <span className="flex items-center gap-2 font-medium">
-                    <Users className="size-3.5 text-muted-foreground" />
+                    <Users className="text-muted-foreground size-3.5" />
                     {r.name}
                   </span>
-                  <span className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  <span className="text-muted-foreground flex items-center gap-3 text-[11px]">
                     <span className="inline-flex items-center gap-1">
                       <PhoneCall className="size-3" /> {r.calls}
                     </span>
@@ -291,23 +287,15 @@ export default async function DashboardPage() {
   );
 }
 
-function Kpi({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: number | string;
-  sub?: string;
-}) {
+function Kpi({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-medium text-muted-foreground">{label}</CardTitle>
+        <CardTitle className="text-muted-foreground text-xs font-medium">{label}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-semibold tabular-nums">{value}</div>
-        {sub && <div className="mt-0.5 text-[11px] text-muted-foreground">{sub}</div>}
+        {sub && <div className="text-muted-foreground mt-0.5 text-[11px]">{sub}</div>}
       </CardContent>
     </Card>
   );

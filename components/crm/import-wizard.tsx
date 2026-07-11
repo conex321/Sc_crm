@@ -168,12 +168,11 @@ export function ImportWizard() {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">1 · Start from the template</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 text-xs text-muted-foreground">
+          <CardContent className="text-muted-foreground space-y-3 text-xs">
             <p>
-              Download the template, fill one lead per row (school/company +
-              contact person), and upload it back. Column headers in the
-              template map automatically. Your own files work too — you&apos;ll
-              just confirm the column mapping.
+              Download the template, fill one lead per row (school/company + contact person), and
+              upload it back. Column headers in the template map automatically. Your own files work
+              too — you&apos;ll just confirm the column mapping.
             </p>
             <div className="flex gap-2">
               <Button size="sm" onClick={() => downloadTemplate("xlsx")}>
@@ -200,12 +199,12 @@ export function ImportWizard() {
                 const f = e.dataTransfer.files?.[0];
                 if (f) void handleFile(f);
               }}
-              className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed p-10 text-sm text-muted-foreground transition hover:border-primary/40 hover:bg-muted/30"
+              className="text-muted-foreground hover:border-primary/40 hover:bg-muted/30 flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed p-10 text-sm transition"
             >
               <FileSpreadsheet className="size-8 opacity-50" />
               <span>
-                <span className="font-medium text-foreground">Click to choose</span> or drag a
-                .xlsx / .csv file here
+                <span className="text-foreground font-medium">Click to choose</span> or drag a .xlsx
+                / .csv file here
               </span>
               <span className="text-[11px]">Up to {IMPORT_ROW_LIMIT.toLocaleString()} rows</span>
             </button>
@@ -231,8 +230,8 @@ export function ImportWizard() {
     return (
       <div className="max-w-3xl space-y-4">
         <div className="flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{filename}</span> ·{" "}
+          <div className="text-muted-foreground text-xs">
+            <span className="text-foreground font-medium">{filename}</span> ·{" "}
             {rawRows.length.toLocaleString()} rows · {mappedCount}/{headers.length} columns mapped
           </div>
           <Button variant="ghost" size="sm" onClick={() => setStep("upload")}>
@@ -241,7 +240,7 @@ export function ImportWizard() {
         </div>
 
         {mappingIssues.length > 0 && (
-          <div className="rounded-md border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="border-pd-warning-bg bg-pd-warning-bg-light text-pd-warning-strong rounded-md border p-3 text-xs">
             {mappingIssues.map((m) => (
               <div key={m}>{m}</div>
             ))}
@@ -265,7 +264,7 @@ export function ImportWizard() {
                 {headers.map((h) => (
                   <TableRow key={h}>
                     <TableCell className="font-medium">{h || "(blank header)"}</TableCell>
-                    <TableCell className="max-w-[14rem] truncate text-xs text-muted-foreground">
+                    <TableCell className="text-muted-foreground max-w-[14rem] truncate text-xs">
                       {String(rawRows[0]?.[h] ?? "")}
                     </TableCell>
                     <TableCell>
@@ -312,12 +311,12 @@ export function ImportWizard() {
     const { mapped, droppedNoName } = mappedPreview;
     return (
       <div className="max-w-4xl space-y-4">
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="text-muted-foreground flex items-center justify-between text-xs">
           <div>
-            <span className="font-medium text-foreground">{mapped.length.toLocaleString()}</span>{" "}
+            <span className="text-foreground font-medium">{mapped.length.toLocaleString()}</span>{" "}
             rows will import
             {droppedNoName > 0 && (
-              <span className="ml-2 text-amber-600 dark:text-amber-400">
+              <span className="text-pd-warning-strong ml-2">
                 · {droppedNoName} skipped (no account name)
               </span>
             )}
@@ -329,7 +328,9 @@ export function ImportWizard() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Preview · first {Math.min(10, mapped.length)} rows</CardTitle>
+            <CardTitle className="text-sm">
+              Preview · first {Math.min(10, mapped.length)} rows
+            </CardTitle>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <Table>
@@ -365,10 +366,10 @@ export function ImportWizard() {
           </CardContent>
         </Card>
 
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <div className="text-muted-foreground flex items-center justify-between text-xs">
           <span>
-            Existing schools are matched by name (no duplicates); contacts dedupe by email.
-            You can revert this import afterwards.
+            Existing schools are matched by name (no duplicates); contacts dedupe by email. You can
+            revert this import afterwards.
           </span>
           <Button onClick={() => void runImport()}>
             <Upload className="size-3.5" /> Import {mapped.length.toLocaleString()} rows
@@ -385,13 +386,13 @@ export function ImportWizard() {
         <Card>
           <CardContent className="space-y-3 p-6">
             <div className="text-sm font-medium">Importing {filename}…</div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
               <div
-                className="h-full rounded-full bg-primary transition-all"
+                className="bg-primary h-full rounded-full transition-all"
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-muted-foreground text-xs">
               {progress.sent.toLocaleString()} / {progress.total.toLocaleString()} rows
               {progress.errors > 0 && ` · ${progress.errors} errors`}
             </div>
@@ -407,7 +408,7 @@ export function ImportWizard() {
       <Card>
         <CardContent className="space-y-3 p-6">
           <div className="flex items-center gap-2 text-sm font-medium">
-            <CheckCircle2 className="size-5 text-emerald-500" /> Import complete
+            <CheckCircle2 className="text-pd-positive size-5" /> Import complete
           </div>
           {summary && (
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -420,7 +421,7 @@ export function ImportWizard() {
             </div>
           )}
           {summary && summary.errors.length > 0 && (
-            <div className="max-h-32 overflow-y-auto rounded border bg-muted/30 p-2 text-[11px] text-muted-foreground">
+            <div className="bg-muted/30 text-muted-foreground max-h-32 overflow-y-auto rounded border p-2 text-[11px]">
               {summary.errors.slice(0, 20).map((e) => (
                 <div key={e.row}>
                   Row {e.row}: {e.message}
@@ -457,7 +458,7 @@ export function ImportWizard() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded border bg-muted/20 px-2 py-1.5">
+    <div className="bg-muted/20 rounded border px-2 py-1.5">
       <div className="text-muted-foreground">{label}</div>
       <div className="font-semibold tabular-nums">{value.toLocaleString()}</div>
     </div>
