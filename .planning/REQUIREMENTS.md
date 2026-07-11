@@ -1,4 +1,4 @@
-# Requirements: SchoolConex CRM — Pipedrive Parity v1
+| DEAL-07 | Phase 2 | Complete || DEAL-06 | Phase 2 | Complete || DEAL-05 | Phase 2 | Complete |# Requirements: SchoolConex CRM — Pipedrive Parity v1
 
 **Defined:** 2026-07-11
 **Core Value:** Rayan can run his entire sales day inside the app — triage leads, work deals on a Pipedrive-grade kanban, email prospects, and see what needs attention.
