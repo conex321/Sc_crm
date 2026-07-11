@@ -159,6 +159,8 @@ export const pipelineStages = pgTable(
     probability: smallint("probability").notNull().default(0),
     isWon: boolean("is_won").notNull().default(false),
     isLost: boolean("is_lost").notNull().default(false),
+    // Rotting threshold in days (D-039 phase 2). Null = rotting off for stage.
+    rotDays: integer("rot_days"),
     ...auditCols,
   },
   (t) => [
@@ -167,48 +169,71 @@ export const pipelineStages = pgTable(
 );
 
 // ─── opportunities ───────────────────────────────────────────────────
-export const opportunities = pgTable("opportunities", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  accountId: uuid("account_id")
-    .notNull()
-    .references(() => accounts.id, { onDelete: "cascade" }),
-  pipelineId: uuid("pipeline_id")
-    .notNull()
-    .references(() => pipelines.id, { onDelete: "restrict" }),
-  stageId: uuid("stage_id")
-    .notNull()
-    .references(() => pipelineStages.id, { onDelete: "restrict" }),
-  name: text("name").notNull(),
-  amount: numeric("amount", { precision: 14, scale: 2 }),
-  currency: text("currency").notNull().default("USD"),
-  expectedCloseDate: date("expected_close_date"),
-  ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
-  primaryContactId: uuid("primary_contact_id").references(() => contacts.id, {
-    onDelete: "set null",
-  }),
-  status: opportunityStatusEnum("status").notNull().default("open"),
-  wonReason: text("won_reason"),
-  lostReason: text("lost_reason"),
-  ...auditCols,
-  ...softDelete,
-});
+export const opportunities = pgTable(
+  "opportunities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    pipelineId: uuid("pipeline_id")
+      .notNull()
+      .references(() => pipelines.id, { onDelete: "restrict" }),
+    stageId: uuid("stage_id")
+      .notNull()
+      .references(() => pipelineStages.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    amount: numeric("amount", { precision: 14, scale: 2 }),
+    currency: text("currency").notNull().default("USD"),
+    expectedCloseDate: date("expected_close_date"),
+    ownerUserId: uuid("owner_user_id").references(() => users.id, { onDelete: "set null" }),
+    primaryContactId: uuid("primary_contact_id").references(() => contacts.id, {
+      onDelete: "set null",
+    }),
+    status: opportunityStatusEnum("status").notNull().default("open"),
+    wonReason: text("won_reason"),
+    lostReason: text("lost_reason"),
+    // Deal label color key (fixed six-key palette, lib/crm/labels.ts).
+    label: text("label"),
+    // Stamped by stageStatusPatch when status transitions (migration 0013).
+    wonAt: timestamp("won_at", { withTimezone: true }),
+    lostAt: timestamp("lost_at", { withTimezone: true }),
+    ...auditCols,
+    ...softDelete,
+  },
+  (t) => [
+    // Mirrors migration 0013 partial index (forecast bucketing + list sorting).
+    index("opportunities_expected_close_idx")
+      .on(t.expectedCloseDate)
+      .where(sql`deleted_at is null`),
+  ],
+);
 
 // ─── activities (parent table per D-011) ─────────────────────────────
 // account_id is NULLABLE (D-014) — unmatched inbound events route to "Unmatched inbox".
-export const activities = pgTable("activities", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
-  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
-  opportunityId: uuid("opportunity_id").references(() => opportunities.id, {
-    onDelete: "set null",
-  }),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-  channel: activityChannelEnum("channel").notNull(),
-  direction: activityDirectionEnum("direction").notNull().default("system"),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
-  summary: text("summary").notNull(),
-  ...auditCols,
-});
+export const activities = pgTable(
+  "activities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    opportunityId: uuid("opportunity_id").references(() => opportunities.id, {
+      onDelete: "set null",
+    }),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    channel: activityChannelEnum("channel").notNull(),
+    direction: activityDirectionEnum("direction").notNull().default("system"),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    summary: text("summary").notNull(),
+    ...auditCols,
+  },
+  (t) => [
+    // Mirrors migration 0001's actual index (composite, non-partial) — it
+    // already covers the opportunity_next_task join path; 0013's `create index
+    // if not exists` for this name is a no-op on any DB that ran 0001.
+    index("activities_opportunity_idx").on(t.opportunityId, t.occurredAt.desc()),
+  ],
+);
 
 // ─── notes (1:1 child of activities; channel='note') ─────────────────
 export const notes = pgTable("notes", {
