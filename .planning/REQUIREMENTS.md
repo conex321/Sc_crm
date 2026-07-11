@@ -12,8 +12,8 @@ Requirements for this milestone. Each maps to roadmap phases. Behavior details c
 - [ ] **DSGN-01**: App renders in Pipedrive's visual language — white surfaces, Pipedrive-green primary actions, their gray text/divider hierarchy — via a three-layer token system (base 0–800 shade scales → semantic groups Surface/Fill/Divider/Text/Icon/Primary/Negative/Warning/Positive/Info → components) in Tailwind v4 `@theme`
 - [ ] **DSGN-02**: Top bar has a persistent global search field and a green "+" quick-add menu (Lead / Deal / Person / Organization / Activity) reachable from every page
 - [ ] **DSGN-03**: Left nav restyled Pipedrive-fashion (icon + label items covering Leads, Deals, People, Organizations, Mail, Insights, Activities-todo, Settings) with SchoolConex branding
-- [ ] **DSGN-04**: Existing screens (accounts, kanban, imports, dashboard, settings) re-skin coherently with no functional regression, dark mode still works, compact density preserved
-- [ ] **DSGN-05**: All money renders CAD via one shared formatter (legacy USD hardcodes swept)
+- [x] **DSGN-04**: Existing screens (accounts, kanban, imports, dashboard, settings) re-skin coherently with no functional regression, dark mode still works, compact density preserved
+- [x] **DSGN-05**: All money renders CAD via one shared formatter (legacy USD hardcodes swept)
 
 ### Deals (DEAL)
 
@@ -85,8 +85,8 @@ Deferred to wave 2. Tracked but not in current roadmap.
 | DSGN-01 | Phase 1 | Pending |
 | DSGN-02 | Phase 1 | Pending |
 | DSGN-03 | Phase 1 | Pending |
-| DSGN-04 | Phase 1 | Pending |
-| DSGN-05 | Phase 1 | Pending |
+| DSGN-04 | Phase 1 | Complete |
+| DSGN-05 | Phase 1 | Complete |
 | DEAL-01 | Phase 2 | Pending |
 | DEAL-02 | Phase 2 | Pending |
 | DEAL-03 | Phase 2 | Pending |

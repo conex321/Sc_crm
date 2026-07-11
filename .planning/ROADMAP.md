@@ -31,7 +31,7 @@ Rebuild the existing CRM's surface to match Pipedrive's workflow and visual desi
   3. Left nav shows Pipedrive-style icon + label items (Leads, Deals, People, Organizations, Mail, Insights, Activities, Settings) with SchoolConex branding
   4. Existing screens (accounts, kanban, imports, dashboard, settings) work exactly as before under the reskin — dark mode intact, 14px compact density preserved
   5. Every money value in the app displays CAD via the one shared formatter (legacy USD hardcodes in opportunity-list, document-list, catalog, opportunity detail are swept)
-**Plans**: TBD
+**Plans**: 2/2 executed (01-PLAN-01 tokens+shell, 01-PLAN-02 sweep+formatter+gate) — visual checklist + deploy pending
 **UI hint**: yes
 **Verification**: tsc + build + e2e route walk + Playwright pass + `npx vercel --prod --yes` + report + notes update
 **Notes**: Sample exact Pipedrive hexes/typography from Figma Community files + live-app CSS (known gap); semantic token structure already verified in `docs/research/pipedrive-teardown.md`. Nav items for Leads/Mail/Insights may point at placeholder routes until their phases land.
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Pipedrive design system | 0/TBD | Not started | - |
+| 1. Pipedrive design system | 2/2 | Executed — visual checklist + deploy pending | - |
 | 2. Deals parity | 0/TBD | Not started | - |
 | 3. Leads inbox | 0/TBD | Not started | - |
 | 4. Contacts & organizations | 0/TBD | Not started | - |
