@@ -80,4 +80,38 @@ Deferred to wave 2. Tracked but not in current roadmap.
 
 ## Traceability
 
-<!-- Filled by roadmap: REQ-ID → Phase -->
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| DSGN-01 | Phase 1 | Pending |
+| DSGN-02 | Phase 1 | Pending |
+| DSGN-03 | Phase 1 | Pending |
+| DSGN-04 | Phase 1 | Pending |
+| DSGN-05 | Phase 1 | Pending |
+| DEAL-01 | Phase 2 | Pending |
+| DEAL-02 | Phase 2 | Pending |
+| DEAL-03 | Phase 2 | Pending |
+| DEAL-04 | Phase 2 | Pending |
+| DEAL-05 | Phase 2 | Pending |
+| DEAL-06 | Phase 2 | Pending |
+| DEAL-07 | Phase 2 | Pending |
+| LEAD-01 | Phase 3 | Pending |
+| LEAD-02 | Phase 3 | Pending |
+| LEAD-03 | Phase 3 | Pending |
+| LEAD-04 | Phase 3 | Pending |
+| CONT-01 | Phase 4 | Pending |
+| CONT-02 | Phase 4 | Pending |
+| CONT-03 | Phase 4 | Pending |
+| CONT-04 | Phase 4 | Pending |
+| CONT-05 | Phase 4 | Pending |
+| CONT-06 | Phase 4 | Pending |
+| CONT-07 | Phase 4 | Pending |
+| MAIL-01 | Phase 5 | Pending |
+| MAIL-02 | Phase 5 | Pending |
+| MAIL-03 | Phase 5 | Pending |
+| MAIL-04 | Phase 5 | Pending |
+| MAIL-05 | Phase 5 | Pending |
+| INSG-01 | Phase 6 | Pending |
+| INSG-02 | Phase 6 | Pending |
+| INSG-03 | Phase 6 | Pending |
+
+**Coverage:** 31/31 v1 requirements mapped (roadmap created 2026-07-11).
