@@ -1,6 +1,8 @@
 import {
   boolean,
   date,
+  index,
+  integer,
   jsonb,
   numeric,
   pgEnum,
@@ -11,6 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // ─── Enums ───────────────────────────────────────────────────────────
 export const userRoleEnum = pgEnum("user_role", ["rep", "manager", "admin"]);
@@ -106,6 +109,11 @@ export const accounts = pgTable("accounts", {
   // Invoice/payment rollup:
   // { invoiced, paid, outstanding, invoiceCount, paymentCount, firstInvoiceDate, lastInvoiceDate, currency }.
   billingSummary: jsonb("billing_summary"),
+  // Indexed normalized name for import dedupe (D-044). MUST stay in lockstep
+  // with migration 0012 — drizzle db:push would drop it if absent here.
+  normName: text("norm_name").generatedAlwaysAs(
+    sql`regexp_replace(lower(name), '[^a-z0-9]', '', 'g')`,
+  ),
   ...auditCols,
   ...softDelete,
 });
@@ -558,3 +566,57 @@ export type MailshakeLead = typeof mailshakeLeads.$inferSelect;
 export type NewMailshakeLead = typeof mailshakeLeads.$inferInsert;
 export type ContractEvent = typeof contractEvents.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
+
+// ─── import_batches (D-044 — CSV/Excel/API lead imports) ─────────────
+// One row per import run. Lineage lives in import_batch_rows so revert can
+// delete exactly the rows the batch CREATED (never merely matched ones).
+export const importBatches = pgTable(
+  "import_batches",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    filename: text("filename").notNull(),
+    source: text("source").notNull().default("csv_upload"),
+    status: text("status").notNull().default("pending"),
+    mapping: jsonb("mapping").notNull().default({}),
+    totalRows: integer("total_rows").notNull().default(0),
+    accountsCreated: integer("accounts_created").notNull().default(0),
+    accountsMatched: integer("accounts_matched").notNull().default(0),
+    contactsCreated: integer("contacts_created").notNull().default(0),
+    contactsUpdated: integer("contacts_updated").notNull().default(0),
+    skippedRows: integer("skipped_rows").notNull().default(0),
+    errorRows: jsonb("error_rows").notNull().default([]),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    revertedAt: timestamp("reverted_at", { withTimezone: true }),
+  },
+  (t) => [index("import_batches_created_by_idx").on(t.createdBy)],
+);
+
+export const importBatchRows = pgTable(
+  "import_batch_rows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => importBatches.id, { onDelete: "cascade" }),
+    rowIndex: integer("row_index").notNull(),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    accountAction: text("account_action"),
+    contactAction: text("contact_action"),
+    error: text("error"),
+    raw: jsonb("raw"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("import_batch_rows_batch_id_row_index_key").on(t.batchId, t.rowIndex),
+    index("import_batch_rows_batch_idx").on(t.batchId),
+    index("import_batch_rows_account_idx").on(t.accountId),
+  ],
+);
+
+export type ImportBatch = typeof importBatches.$inferSelect;
+export type ImportBatchRow = typeof importBatchRows.$inferSelect;

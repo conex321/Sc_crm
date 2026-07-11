@@ -1,3 +1,5 @@
+import { config } from "dotenv";
+config({ path: ".env.local" });
 // Smoke-test the live Vercel deployment with the demo user.
 // Run: tsx scripts/vercel-smoke-prod.mts
 import { chromium } from "playwright";
@@ -19,7 +21,7 @@ async function main() {
   await page.screenshot({ path: `${SHOTS}/prod-01-login.png`, fullPage: true });
 
   await page.locator('input[name="email"]').fill("demo@schoolconex.com");
-  await page.locator('input[name="password"]').fill("Test1234!");
+  await page.locator('input[name="password"]').fill(process.env.E2E_LOGIN_PASSWORD!);
   await Promise.all([
     page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 20_000 }).catch(() => {}),
     page.locator('button[type="submit"]').first().click(),

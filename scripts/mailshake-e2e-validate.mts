@@ -42,7 +42,7 @@ async function main() {
   // 1) Login
   await page.goto(`${BASE}/login`);
   await page.locator('input[name="email"]').fill("demo@schoolconex.com");
-  await page.locator('input[name="password"]').fill("Test1234!");
+  await page.locator('input[name="password"]').fill(process.env.E2E_LOGIN_PASSWORD!);
   await Promise.all([
     page.waitForURL((u) => !u.pathname.includes("/login"), { timeout: 15_000 }).catch(() => {}),
     page.locator('button[type="submit"]').first().click(),

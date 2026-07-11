@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus } from "lucide-react";
+import { Plus, Upload } from "lucide-react";
 import { listAccounts, type CustomerStatus } from "@/lib/crm/accounts";
 import { CustomerStatusBadge } from "@/components/crm/customer-status-badge";
 import { requireUser } from "@/lib/auth/session";
@@ -71,6 +71,11 @@ export default async function AccountsPage(props: {
           <Button asChild size="sm" variant={params.mine === "1" ? "default" : "outline"}>
             <Link href={qs({ mine: params.mine === "1" ? undefined : "1" })}>
               {params.mine === "1" ? "All" : "Mine"}
+            </Link>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <Link href="/accounts/import">
+              <Upload className="size-3.5" /> Import
             </Link>
           </Button>
           <Button asChild size="sm">

@@ -7,13 +7,13 @@
 --
 -- Credentials:
 --   email    : demo@schoolconex.com
---   password : Test1234!
+--   password : CHANGE_ME_BEFORE_RUNNING
 -- =============================================================================
 
 do $$
 declare
   demo_email     text := 'demo@schoolconex.com';
-  demo_password  text := 'Test1234!';
+  demo_password  text := 'CHANGE_ME_BEFORE_RUNNING';
   v_user_id      uuid;
 begin
   select id into v_user_id from auth.users where email = demo_email;

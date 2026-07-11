@@ -12,7 +12,7 @@ const COOKIE_NAME = `sb-${projectRef}-auth-token`;
 const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
   method: "POST",
   headers: { apikey: SUPABASE_ANON, "Content-Type": "application/json" },
-  body: JSON.stringify({ email: "demo@schoolconex.com", password: "Test1234!" }),
+  body: JSON.stringify({ email: "demo@schoolconex.com", password: process.env.E2E_LOGIN_PASSWORD! }),
 });
 const session = await res.json();
 const cookie = `${COOKIE_NAME}=base64-${Buffer.from(JSON.stringify(session)).toString("base64")}`;

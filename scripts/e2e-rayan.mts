@@ -15,9 +15,15 @@ const SUPABASE_ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const projectRef = new URL(SUPABASE_URL).host.split(".")[0];
 const COOKIE_NAME = `sb-${projectRef}-auth-token`;
 
-// Demo is the only sign-in user. Rayan's Dialpad calls just need to be visible.
-const EMAIL = "demo@schoolconex.com";
-const PASSWORD = "Test1234!";
+// Demo is the only password sign-in user. Credentials live in .env.local
+// (gitignored) — the old hardcoded password is in public git history, so the
+// demo account's password should be rotated.
+const EMAIL = process.env.E2E_LOGIN_EMAIL ?? "demo@schoolconex.com";
+const PASSWORD = process.env.E2E_LOGIN_PASSWORD ?? "";
+if (!PASSWORD) {
+  console.error("Set E2E_LOGIN_PASSWORD (and optionally E2E_LOGIN_EMAIL) in .env.local");
+  process.exit(1);
+}
 
 type Session = {
   access_token: string;
@@ -66,6 +72,8 @@ const ROUTES: RouteCheck[] = [
   { path: "/", expectStatus: 307 }, // redirects to /accounts
   { path: "/accounts", expectBody: [/Accounts/, /SchoolConex/i] },
   { path: "/accounts/new", expectBody: [/Account name/, /Owner/] },
+  { path: "/accounts/import", expectBody: [/Import leads/, /template/i] },
+  { path: "/accounts/imports", expectBody: [/Import history/] },
   { path: "/opportunities/new", expectBody: [/Pipeline|Stage/, /Owner/] },
   { path: "/dashboard", expectBody: [/Follow-up|Open leads|pipeline/i] },
   { path: "/opportunities", expectBody: [/Opportunit/i] },

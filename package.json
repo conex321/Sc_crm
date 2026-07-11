@@ -35,7 +35,9 @@
     "quickbooks:build-canonical": "tsx scripts/quickbooks-build-canonical.mts",
     "quickbooks:import": "tsx scripts/quickbooks-import-customers.mts",
     "customers:assign-owners": "tsx scripts/assign-customer-owners.mts",
-    "demo:purge": "tsx scripts/purge-demo-data.mts"
+    "demo:purge": "tsx scripts/purge-demo-data.mts",
+    "leads:import-sheet": "tsx scripts/import-google-sheet-leads.mts",
+    "leads:import-hubspot": "tsx scripts/hubspot-import.mts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -66,6 +68,7 @@
     "sonner": "^1.7.4",
     "stripe": "^22.1.0",
     "tailwind-merge": "^2.5.5",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.25.76"
   },
   "devDependencies": {

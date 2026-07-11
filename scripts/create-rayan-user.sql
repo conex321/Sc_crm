@@ -4,13 +4,13 @@
 -- synced data. Matthew (matthew@schoolconex.com) is the admin.
 --
 --   email    : rayan@schoolconex.com
---   password : Test1234!
+--   password : CHANGE_ME_BEFORE_RUNNING
 -- =============================================================================
 
 do $$
 declare
   rayan_email    text := 'rayan@schoolconex.com';
-  rayan_password text := 'Test1234!';
+  rayan_password text := 'CHANGE_ME_BEFORE_RUNNING';
   v_user_id      uuid;
 begin
   select id into v_user_id from auth.users where email = rayan_email;
